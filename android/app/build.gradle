@@ -1,0 +1,87 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+// Load local.properties for secrets like MAPS_API_KEY
+def localProps = new Properties()
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) {
+    localPropsFile.withReader('UTF-8') { reader -> localProps.load(reader) }
+}
+def envMapsKey = System.getenv('MAPS_API_KEY')
+def mapsApiKeyValue = (localProps.getProperty('MAPS_API_KEY') ?: envMapsKey) ?: ""
+
+// Load signing from key.properties
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withReader('UTF-8') { reader -> keystoreProperties.load(reader) }
+}
+
+android {
+    namespace = "app.soi.travel.travel_planner"
+    compileSdk = 35
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "app.soi.travel.travel_planner"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+        // Pass Google Maps API Key into AndroidManifest via placeholder (merge, don't overwrite)
+        manifestPlaceholders += [ MAPS_API_KEY: mapsApiKeyValue ]
+    }
+
+    signingConfigs {
+        release {
+            if (keystoreProperties.isEmpty()) {
+                // Fallback to debug signing if no keystore provided
+                signingConfig = signingConfigs.debug
+            } else {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+        debug {
+            if (!keystoreProperties.isEmpty()) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // Sign release with configured keystore (falls back to debug if missing)
+            signingConfig signingConfigs.release
+        }
+        debug {
+            // Also sign debug builds for easier API Key restriction setup
+            signingConfig signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
