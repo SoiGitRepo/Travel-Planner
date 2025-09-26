@@ -46,7 +46,9 @@ app.*.map.json
 
 # Local planning and environment files (do not commit)
 plan.md
-.env*
+.env
+.env.*
+!.env.example
 
 # iOS local environment (do not commit)
 ios/Runner/Environment.xcconfig

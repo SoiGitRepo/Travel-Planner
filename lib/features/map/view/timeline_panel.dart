@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:travel_planner/core/widgets/glassy/glassy.dart';
+import '../../plan/data/plan_io.dart';
 
 import '../../../core/models/transport_mode.dart';
 import '../../../core/models/transport_segment.dart';
@@ -27,6 +28,19 @@ class TimelinePanel extends ConsumerWidget {
       if (b.scheduledTime == null) return -1;
       return a.scheduledTime!.compareTo(b.scheduledTime!);
     });
+    // 总览统计：交通总时长（优先我的时长，其次预估）、交通总距离、停留总时长
+    final int travelMinutes = segs.fold<int>(
+      0,
+      (sum, s) => (sum + (s.userDurationMinutes ?? s.estimatedDurationMinutes ?? 0)).toInt(),
+    );
+    final double distanceMeters = segs.fold<double>(
+      0.0,
+      (sum, s) => sum + (s.distanceMeters ?? 0.0),
+    );
+    final int stayMinutes = nodes.fold<int>(
+      0,
+      (sum, n) => (sum + (n.stayDurationMinutes ?? 0)).toInt(),
+    );
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -78,6 +92,102 @@ class TimelinePanel extends ConsumerWidget {
                     child: ListTile(
                       title: Text('时间轴'),
                       subtitle: Text('长按地图添加节点；每段交通方式可单独设置；点击可编辑'),
+                    ),
+                  ),
+                  // 总览卡片与添加日期计划入口
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.assessment),
+                          title: const Text('总览'),
+                          subtitle: Text(
+                            '交通 ${travelMinutes} 分钟 · 距离 ${(distanceMeters / 1000).toStringAsFixed(1)} km · 停留 ${stayMinutes} 分钟',
+                          ),
+                          trailing: Wrap(
+                            spacing: 8,
+                            children: [
+                              TextButton.icon(
+                                onPressed: () async {
+                                  final now = DateTime.now();
+                                  final picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: planAsync.valueOrNull?.currentPlan.date ?? now,
+                                    firstDate: DateTime(now.year - 1),
+                                    lastDate: DateTime(now.year + 2),
+                                  );
+                                  if (picked != null) {
+                                    await ref.read(planControllerProvider.notifier).createPlanForDate(picked);
+                                  }
+                                },
+                                icon: const Icon(Icons.add),
+                                label: const Text('添加日期计划'),
+                              ),
+                              TextButton.icon(
+                                onPressed: () async {
+                                  final group = planAsync.valueOrNull?.group;
+                                  if (group == null) return;
+                                  final io = const PlanIO();
+                                  final path = await io.saveExportToFile(group);
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('已导出至文件：$path')),
+                                  );
+                                },
+                                icon: const Icon(Icons.download),
+                                label: const Text('导出JSON'),
+                              ),
+                              TextButton.icon(
+                                onPressed: () async {
+                                  final controller = TextEditingController();
+                                  final jsonStr = await showDialog<String?>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('导入 JSON（粘贴内容）'),
+                                      content: SizedBox(
+                                        width: 520,
+                                        child: TextField(
+                                          controller: controller,
+                                          maxLines: 12,
+                                          decoration: const InputDecoration(hintText: '将 JSON 粘贴到此处'),
+                                        ),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx, null),
+                                          child: const Text('取消'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx, controller.text),
+                                          child: const Text('确定'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (jsonStr == null || jsonStr.trim().isEmpty) return;
+                                  try {
+                                    final io = const PlanIO();
+                                    final group = await io.importFromJson(jsonStr);
+                                    await ref.read(planControllerProvider.notifier).replaceGroup(group);
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('导入成功')),
+                                    );
+                                  } catch (e) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('导入失败：$e')),
+                                    );
+                                  }
+                                },
+                                icon: const Icon(Icons.upload),
+                                label: const Text('导入JSON'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   const SliverToBoxAdapter(child: Divider(height: 1)),
@@ -181,6 +291,38 @@ class TimelinePanel extends ConsumerWidget {
                                 spacing: 8,
                                 children: [
                                   IconButton(
+                                    tooltip: '重命名',
+                                    icon: const Icon(Icons.edit),
+                                    onPressed: () async {
+                                      final controller = TextEditingController(text: n.title);
+                                      final newTitle = await showDialog<String?>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          title: const Text('重命名节点'),
+                                          content: TextField(
+                                            controller: controller,
+                                            decoration: const InputDecoration(hintText: '输入新的名称'),
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(ctx, null),
+                                              child: const Text('取消'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+                                              child: const Text('确定'),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                      if (newTitle != null && newTitle.isNotEmpty) {
+                                        await ref
+                                            .read(planControllerProvider.notifier)
+                                            .updateNodeTitle(nodeId: n.id, title: newTitle);
+                                      }
+                                    },
+                                  ),
+                                  IconButton(
                                     tooltip: '设置到达时间',
                                     icon: const Icon(Icons.access_time),
                                     onPressed: () async {
@@ -270,9 +412,12 @@ class TimelinePanel extends ConsumerWidget {
                           final segNN = seg;
                           final est = segNN.estimatedDurationMinutes;
                           final user = segNN.userDurationMinutes;
+                          final distStr = (segNN.distanceMeters != null && segNN.distanceMeters! > 0)
+                              ? ' · 距离 ${(segNN.distanceMeters! / 1000).toStringAsFixed(1)} km'
+                              : '';
                           final subtitle = user != null
-                              ? '我的时长 ${user} 分钟${est != null ? '（预估 ${est} 分钟）' : ''}'
-                              : (est != null ? '预估 $est 分钟' : '无预估，直线连接');
+                              ? '我的时长 ${user} 分钟${est != null ? '（预估 ${est} 分钟）' : ''}$distStr'
+                              : (est != null ? '预估 $est 分钟$distStr' : '无预估，直线连接$distStr');
                           return ListTile(
                             dense: true,
                             leading: const Icon(Icons.more_horiz,

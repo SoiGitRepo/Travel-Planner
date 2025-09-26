@@ -32,6 +32,15 @@ class PlanController extends AsyncNotifier<PlanState> {
     return PlanState(group: group, currentPlanIndex: 0);
   }
 
+  Future<void> replaceGroup(PlanGroup group, {int? selectIndex}) async {
+    // 覆盖存储并更新状态
+    await _repo.save(group);
+    final idx = (selectIndex != null && selectIndex >= 0 && selectIndex < group.plans.length)
+        ? selectIndex
+        : 0;
+    state = AsyncData(PlanState(group: group, currentPlanIndex: idx));
+  }
+
   Future<void> selectPlan(int index) async {
     final s = state.valueOrNull;
     if (s == null || index < 0 || index >= s.group.plans.length) return;
@@ -150,6 +159,28 @@ class PlanController extends AsyncNotifier<PlanState> {
     // 添加节点后自动排程（首节点默认 08:00；默认停留 60 分钟；其后根据上一个节点+停留+交通时间计算）
     final scheduled = await _recalcScheduleForGroup(newGroup, s.currentPlanIndex);
     state = AsyncData(PlanState(group: scheduled, currentPlanIndex: s.currentPlanIndex));
+  }
+  
+  Future<void> updateNodeTitle({required String nodeId, required String title}) async {
+    final s = state.valueOrNull;
+    if (s == null) return;
+    final plan = s.currentPlan;
+    final nodes = List<Node>.from(plan.nodes);
+    final idx = nodes.indexWhere((n) => n.id == nodeId);
+    if (idx < 0) return;
+    final old = nodes[idx];
+    nodes[idx] = Node(
+      id: old.id,
+      title: title,
+      point: old.point,
+      scheduledTime: old.scheduledTime,
+      stayDurationMinutes: old.stayDurationMinutes,
+    );
+    final newPlan = Plan(id: plan.id, date: plan.date, nodes: nodes, segments: plan.segments);
+    final newPlans = List<Plan>.from(s.group.plans)..[s.currentPlanIndex] = newPlan;
+    final newGroup = PlanGroup(id: s.group.id, name: s.group.name, plans: newPlans);
+    await _repo.save(newGroup);
+    state = AsyncData(PlanState(group: newGroup, currentPlanIndex: s.currentPlanIndex));
   }
   
   Future<void> deleteNode(String nodeId) async {
