@@ -3,27 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:travel_planner/core/widgets/glassy/glassy.dart';
+import 'package:google_api_availability/google_api_availability.dart';
 
-import '../../../core/models/transport_mode.dart';
 import '../../../core/models/latlng_point.dart' as model;
-import '../../../core/models/transport_segment.dart';
 import '../../plan/presentation/plan_controller.dart';
-
-final mapControllerProvider =
-    StateProvider<GoogleMapController?>((ref) => null);
-final transportModeProvider =
-    StateProvider<TransportMode>((ref) => TransportMode.walking);
-// 底部面板当前高度占屏幕高度的比例（0~1）
-final sheetFractionProvider = StateProvider<double>((ref) => 0.2);
-
-class SelectedPlace {
-  final String? nodeId; // 若为已在计划中的节点则有值
-  final String title;
-  final model.LatLngPoint point;
-  const SelectedPlace({this.nodeId, required this.title, required this.point});
-}
-
-final selectedPlaceProvider = StateProvider<SelectedPlace?>((ref) => null);
+import 'providers.dart';
+import 'timeline_panel.dart';
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
@@ -48,6 +34,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   @override
   void initState() {
     super.initState();
+    _initMapProvider();
     _sheetController.addListener(() {
       final size = _sheetController.size; // 0-1
       ref.read(sheetFractionProvider.notifier).state = size;
@@ -76,6 +63,21 @@ class _MapPageState extends ConsumerState<MapPage> {
     _fitDebounce?.cancel();
     _sheetController.dispose();
     super.dispose();
+  }
+
+  Future<void> _initMapProvider() async {
+    // 仅 Android 设备有效，iOS/Web 直接使用 Google 地图
+    try {
+      final availability = await GoogleApiAvailability.instance
+          .checkGooglePlayServicesAvailability();
+      final useAmap = availability != GooglePlayServicesAvailability.success;
+      if (mounted) {
+        // 切换到高德（占位）或谷歌
+        ref.read(useAmapProvider.notifier).state = useAmap;
+      }
+    } catch (_) {
+      // 检测失败时，保持默认（使用 Google），避免影响开发
+    }
   }
 
   Future<void> _fitToNodes(BuildContext context, {bool animate = true}) async {
@@ -182,6 +184,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   @override
   Widget build(BuildContext context) {
     final planAsync = ref.watch(planControllerProvider);
+    final useAmap = ref.watch(useAmapProvider);
 
     final markers = <Marker>{};
     final polylines = <Polyline>{};
@@ -218,10 +221,30 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
     });
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          GoogleMap(
+    final mapWidget = useAmap
+        ? Container(
+            color: Colors.black,
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.map, color: Colors.white70, size: 48),
+                SizedBox(height: 12),
+                Text(
+                  '当前设备不支持谷歌服务，已切换高德地图（占位）',
+                  style: TextStyle(color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 8),
+                Text(
+                  '请稍后在配置中补充高德 API Key 后启用真实地图渲染',
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          )
+        : GoogleMap(
             initialCameraPosition: _initialPosition,
             myLocationButtonEnabled: true,
             myLocationEnabled: false,
@@ -238,7 +261,11 @@ class _MapPageState extends ConsumerState<MapPage> {
               );
             },
             onLongPress: _onLongPress,
-          ),
+          );
+    return Scaffold(
+      body: Stack(
+        children: [
+          mapWidget,
           Positioned(
             top: MediaQuery.of(context).padding.top + 12,
             left: 12,
@@ -255,88 +282,9 @@ class _MapPageState extends ConsumerState<MapPage> {
               onPressed: () => _fitToNodes(context),
               icon: const Icon(Icons.center_focus_strong),
               label: const Text('适配视野'),
-            ),
+            ).glassy(borderRadius: 12),
           ),
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 12,
-            right: 12,
-            child: _ModeSwitcher(),
-          ),
-          // 选择/新增某天计划
-          Positioned(
-            right: 16,
-            bottom: 24,
-            child: FloatingActionButton(
-              heroTag: 'pick_date',
-              onPressed: () async {
-                final today = DateTime.now();
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: today,
-                  firstDate: DateTime(today.year - 1),
-                  lastDate: DateTime(today.year + 2),
-                );
-                if (picked != null) {
-                  await ref
-                      .read(planControllerProvider.notifier)
-                      .createPlanForDate(picked);
-                  // 切换/创建当天计划后，自适应视野
-                  unawaited(_fitToNodes(context));
-                }
-              },
-              child: const Icon(Icons.calendar_month),
-            ),
-          ),
-          // 通过手动输入经纬度添加节点（默认替代方案）
-          Positioned(
-            left: 16,
-            bottom: 24,
-            child: FloatingActionButton(
-              heroTag: 'add_node_manual',
-              onPressed: () async {
-                final latCtl = TextEditingController();
-                final lngCtl = TextEditingController();
-                final titleCtl = TextEditingController();
-                final res = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('添加节点（手动输入经纬度）'),
-                    content: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextField(
-                            controller: titleCtl,
-                            decoration: const InputDecoration(labelText: '标题')),
-                        TextField(
-                            controller: latCtl,
-                            decoration: const InputDecoration(labelText: '纬度')),
-                        TextField(
-                            controller: lngCtl,
-                            decoration: const InputDecoration(labelText: '经度')),
-                      ],
-                    ),
-                    actions: [
-                      TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('取消')),
-                      TextButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('确定')),
-                    ],
-                  ),
-                );
-                if (res == true) {
-                  final lat = double.tryParse(latCtl.text.trim());
-                  final lng = double.tryParse(lngCtl.text.trim());
-                  if (lat != null && lng != null) {
-                    await _onLongPress(LatLng(lat, lng));
-                  }
-                }
-              },
-              child: const Icon(Icons.add_location_alt),
-            ),
-          ),
-          _TimelinePanel(controller: _sheetController),
+          TimelinePanel(controller: _sheetController),
           if (planAsync.isLoading)
             const Positioned.fill(
               child: IgnorePointer(
@@ -344,419 +292,6 @@ class _MapPageState extends ConsumerState<MapPage> {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _ModeSwitcher extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final mode = ref.watch(transportModeProvider);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4))
-        ],
-      ),
-      child: ToggleButtons(
-        isSelected: [
-          mode == TransportMode.walking,
-          mode == TransportMode.driving,
-          mode == TransportMode.transit,
-        ],
-        borderRadius: BorderRadius.circular(12),
-        onPressed: (index) {
-          final next = [
-            TransportMode.walking,
-            TransportMode.driving,
-            TransportMode.transit
-          ][index];
-          ref.read(transportModeProvider.notifier).state = next;
-        },
-        children: const [
-          Padding(
-              padding: EdgeInsets.all(8), child: Icon(Icons.directions_walk)),
-          Padding(
-              padding: EdgeInsets.all(8), child: Icon(Icons.directions_car)),
-          Padding(
-              padding: EdgeInsets.all(8),
-              child: Icon(Icons.directions_transit)),
-        ],
-      ),
-    );
-  }
-}
-
-class _TimelinePanel extends ConsumerWidget {
-  final DraggableScrollableController controller;
-  const _TimelinePanel({required this.controller});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final planAsync = ref.watch(planControllerProvider);
-    final nodesRaw = planAsync.valueOrNull?.currentPlan.nodes ?? const [];
-    final segs = planAsync.valueOrNull?.currentPlan.segments ?? const [];
-    // 按到达时间排序（未设定时间的放在最后，按原序）
-    final nodes = List.of(nodesRaw);
-    nodes.sort((a, b) {
-      if (a.scheduledTime == null && b.scheduledTime == null) return 0;
-      if (a.scheduledTime == null) return 1;
-      if (b.scheduledTime == null) return -1;
-      return a.scheduledTime!.compareTo(b.scheduledTime!);
-    });
-
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: SafeArea(
-        top: false,
-        child: DraggableScrollableSheet(
-          controller: controller,
-          initialChildSize: 0.2,
-          minChildSize: 0.12,
-          maxChildSize: 0.9,
-          snap: true,
-          snapSizes: const [0.12, 0.6, 0.9],
-          expand: false,
-          builder: (context, controller) {
-            return Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(16)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: CustomScrollView(
-                controller: controller,
-                slivers: [
-                  const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                  SliverToBoxAdapter(
-                    child: Center(
-                      child: Container(
-                        height: 6,
-                        width: 56,
-                        decoration: BoxDecoration(
-                            color: Colors.black26,
-                            borderRadius: BorderRadius.circular(3)),
-                      ),
-                    ),
-                  ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                  const SliverToBoxAdapter(
-                    child: ListTile(
-                      title: Text('时间轴'),
-                      subtitle: Text('长按地图添加节点；每段交通方式可单独设置；点击可编辑'),
-                    ),
-                  ),
-                  const SliverToBoxAdapter(child: Divider(height: 1)),
-                  // 选中地点信息面板（若有）
-                  SliverToBoxAdapter(
-                    child: Builder(builder: (context) {
-                      final selected = ref.watch(selectedPlaceProvider);
-                      if (selected == null) return const SizedBox.shrink();
-                      final inPlan = selected.nodeId != null;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        child: Card(
-                          child: ListTile(
-                            leading: const Icon(Icons.place),
-                            title: Text(selected.title),
-                            subtitle: Text(
-                                '${selected.point.lat.toStringAsFixed(5)}, ${selected.point.lng.toStringAsFixed(5)}'),
-                            trailing: Wrap(spacing: 8, children: [
-                              IconButton(
-                                tooltip: inPlan ? '从计划中移除' : '加入计划',
-                                icon: Icon(inPlan ? Icons.remove : Icons.add),
-                                onPressed: () async {
-                                  if (inPlan) {
-                                    await ref
-                                        .read(planControllerProvider.notifier)
-                                        .deleteNode(selected.nodeId!);
-                                  } else {
-                                    await ref
-                                        .read(planControllerProvider.notifier)
-                                        .addNodeAt(
-                                          selected.point,
-                                          title: selected.title,
-                                          mode: ref.read(transportModeProvider),
-                                        );
-                                  }
-                                  ref
-                                      .read(selectedPlaceProvider.notifier)
-                                      .state = null;
-                                },
-                              ),
-                              IconButton(
-                                tooltip: '关闭',
-                                icon: const Icon(Icons.close),
-                                onPressed: () => ref
-                                    .read(selectedPlaceProvider.notifier)
-                                    .state = null,
-                              ),
-                            ]),
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        // 防御：当节点列表为空时，不应构建任何子项（理论上 childCount=0 已避免触发）
-                        if (nodes.isEmpty) return const SizedBox.shrink();
-                        if (index.isEven) {
-                          final i = index ~/ 2;
-                          final n = nodes[i];
-                          final timeStr = n.scheduledTime != null
-                              ? n.scheduledTime!.toString().substring(11, 16)
-                              : '--:--';
-                          return Dismissible(
-                            key: ValueKey('node_${n.id}'),
-                            direction: DismissDirection.endToStart,
-                            background: Container(
-                              color: Colors.red,
-                              alignment: Alignment.centerRight,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
-                              child:
-                                  const Icon(Icons.delete, color: Colors.white),
-                            ),
-                            onDismissed: (_) async {
-                              await ref
-                                  .read(planControllerProvider.notifier)
-                                  .deleteNode(n.id);
-                            },
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: Colors.indigo.shade50,
-                                foregroundColor: Colors.indigo,
-                                child: Text('${i + 1}'),
-                              ),
-                              title: Text(n.title),
-                              subtitle: Text(
-                                '${n.point.lat.toStringAsFixed(5)}, ${n.point.lng.toStringAsFixed(5)}  · 到达 $timeStr${n.stayDurationMinutes != null ? ' · 停留 ${n.stayDurationMinutes} 分钟' : ''}',
-                              ),
-                              onTap: () {
-                                ref.read(selectedPlaceProvider.notifier).state =
-                                    SelectedPlace(
-                                  nodeId: n.id,
-                                  title: n.title,
-                                  point: n.point,
-                                );
-                              },
-                              trailing: Wrap(
-                                spacing: 8,
-                                children: [
-                                  IconButton(
-                                    tooltip: '设置到达时间',
-                                    icon: const Icon(Icons.access_time),
-                                    onPressed: () async {
-                                      final now = DateTime.now();
-                                      final picked = await showTimePicker(
-                                        context: context,
-                                        initialTime: TimeOfDay.fromDateTime(
-                                            n.scheduledTime ?? now),
-                                      );
-                                      if (picked != null) {
-                                        final day =
-                                            planAsync.value!.currentPlan.date;
-                                        final arrival = DateTime(
-                                            day.year,
-                                            day.month,
-                                            day.day,
-                                            picked.hour,
-                                            picked.minute);
-                                        await ref
-                                            .read(
-                                                planControllerProvider.notifier)
-                                            .updateNodeSchedule(
-                                                nodeId: n.id,
-                                                arrivalTime: arrival);
-                                      }
-                                    },
-                                  ),
-                                  IconButton(
-                                    tooltip: '设置停留时长',
-                                    icon: const Icon(Icons.timelapse),
-                                    onPressed: () async {
-                                      final controller = TextEditingController(
-                                          text: (n.stayDurationMinutes ?? '')
-                                              .toString());
-                                      final minutes = await showDialog<int?>(
-                                        context: context,
-                                        builder: (ctx) => AlertDialog(
-                                          title: const Text('设置停留时长（分钟）'),
-                                          content: TextField(
-                                            controller: controller,
-                                            keyboardType: TextInputType.number,
-                                            decoration: const InputDecoration(
-                                                hintText: '例如 60'),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(ctx, null),
-                                                child: const Text('取消')),
-                                            TextButton(
-                                              onPressed: () => Navigator.pop(
-                                                  ctx,
-                                                  int.tryParse(
-                                                      controller.text.trim())),
-                                              child: const Text('确定'),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                      if (minutes != null) {
-                                        await ref
-                                            .read(
-                                                planControllerProvider.notifier)
-                                            .updateNodeSchedule(
-                                                nodeId: n.id,
-                                                stayMinutes: minutes);
-                                      }
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        } else {
-                          final segIndex = (index - 1) ~/ 2;
-                          // 找到当前节点与下一节点之间的段
-                          final fromNode = nodes[segIndex];
-                          final toNode = nodes[segIndex + 1];
-                          TransportSegment? seg;
-                          for (final s in segs) {
-                            if (s.fromNodeId == fromNode.id &&
-                                s.toNodeId == toNode.id) {
-                              seg = s;
-                              break;
-                            }
-                          }
-                          if (seg == null) return const SizedBox.shrink();
-                          final segNN =
-                              seg; // capture a non-null local for closures
-                          final est = segNN.estimatedDurationMinutes;
-                          final user = segNN.userDurationMinutes;
-                          final subtitle = user != null
-                              ? '我的时长 ${user} 分钟${est != null ? '（预估 ${est} 分钟）' : ''}'
-                              : (est != null ? '预估 $est 分钟' : '无预估，直线连接');
-                          return ListTile(
-                            dense: true,
-                            leading: const Icon(Icons.more_horiz,
-                                color: Colors.grey),
-                            title: Text('交通：${segNN.mode.name}'),
-                            subtitle: Text(subtitle),
-                            trailing: Wrap(
-                              spacing: 8,
-                              children: [
-                                IconButton(
-                                  tooltip: '设置我的时长',
-                                  icon: const Icon(Icons.edit),
-                                  onPressed: () async {
-                                    final controller = TextEditingController(
-                                      text: (segNN.userDurationMinutes ??
-                                              segNN.estimatedDurationMinutes ??
-                                              '')
-                                          .toString(),
-                                    );
-                                    final minutes = await showDialog<int?>(
-                                      context: context,
-                                      builder: (ctx) {
-                                        return AlertDialog(
-                                          title: const Text('设置我的交通时长（分钟）'),
-                                          content: TextField(
-                                            controller: controller,
-                                            keyboardType: TextInputType.number,
-                                            decoration: const InputDecoration(
-                                                hintText: '请输入分钟数，例如 15'),
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () =>
-                                                  Navigator.of(ctx).pop(null),
-                                              child: const Text('取消'),
-                                            ),
-                                            TextButton(
-                                              onPressed: () {
-                                                final v = int.tryParse(
-                                                    controller.text.trim());
-                                                Navigator.of(ctx).pop(v);
-                                              },
-                                              child: const Text('确定'),
-                                            ),
-                                          ],
-                                        );
-                                      },
-                                    );
-                                    if (minutes != null) {
-                                      await ref
-                                          .read(planControllerProvider.notifier)
-                                          .setSegmentUserDuration(
-                                              segmentId: segNN.id,
-                                              minutes: minutes);
-                                    }
-                                  },
-                                ),
-                                if (segNN.userDurationMinutes != null)
-                                  IconButton(
-                                    tooltip: '清除我的时长',
-                                    icon: const Icon(Icons.clear),
-                                    onPressed: () async {
-                                      await ref
-                                          .read(planControllerProvider.notifier)
-                                          .setSegmentUserDuration(
-                                              segmentId: segNN.id,
-                                              minutes: null);
-                                    },
-                                  ),
-                                PopupMenuButton<TransportMode>(
-                                  tooltip: '切换交通方式',
-                                  onSelected: (m) async {
-                                    await ref
-                                        .read(planControllerProvider.notifier)
-                                        .setSegmentMode(
-                                            segmentId: segNN.id, mode: m);
-                                  },
-                                  itemBuilder: (ctx) => const [
-                                    PopupMenuItem(
-                                        value: TransportMode.walking,
-                                        child: Text('步行')),
-                                    PopupMenuItem(
-                                        value: TransportMode.driving,
-                                        child: Text('驾车')),
-                                    PopupMenuItem(
-                                        value: TransportMode.transit,
-                                        child: Text('公共交通')),
-                                  ],
-                                  icon: const Icon(Icons.alt_route),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                      },
-                      childCount: nodes.isEmpty ? 0 : (nodes.length * 2 - 1),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
       ),
     );
   }
