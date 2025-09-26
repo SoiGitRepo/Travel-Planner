@@ -80,3 +80,14 @@ fvm flutter test integration_test -d emulator-5554 -r compact
 - 支持为交通段填写自定义时长，并在时间轴优先采用用户时长，同时展示地图预估时长
 - 计划分组/多日切换与管理界面
 - 抽象地图与路线服务环境切换，接入高德地图
+
+### 搜索（Places，可选）
+
+在 `assets/env/.env` 配置 `GOOGLE_PLACES_API_KEY` 可启用地点搜索功能（页面路径 `/search`）：
+
+```
+GOOGLE_PLACES_API_KEY=你的_Places_API_Key
+```
+
+- 若未配置 Key，搜索将返回空结果，但不会影响地图、时间轴等其他功能。
+- 搜索结果支持一键“加入计划”，并返回地图页查看新增节点与自动生成的路线段。

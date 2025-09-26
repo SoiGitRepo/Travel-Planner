@@ -6,6 +6,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:travel_planner/core/widgets/glassy/glassy.dart';
 import 'package:google_api_availability/google_api_availability.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/models/latlng_point.dart' as model;
 import '../../plan/presentation/plan_controller.dart';
@@ -288,6 +289,28 @@ class _MapPageState extends ConsumerState<MapPage> {
             ).glassy(
               borderRadius: 12,
               // glassContainsChild: true,
+              settings: const LiquidGlassSettings(
+                blur: 1,
+              ),
+            ),
+          ),
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 12,
+            right: 12,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                foregroundColor: Colors.black87,
+                shadowColor: Colors.transparent,
+                elevation: 2,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () => context.push('/search'),
+              icon: const Icon(Icons.search),
+              label: const Text('搜索'),
+            ).glassy(
+              borderRadius: 12,
               settings: const LiquidGlassSettings(
                 blur: 1,
               ),
