@@ -8,8 +8,10 @@ import '../models/plan_group.dart';
 
 class HiveBoxes {
   static const planGroups = 'plan_groups';
+  static const settings = 'settings';
 
   static Box<PlanGroup> get planGroupsBox => Hive.box<PlanGroup>(planGroups);
+  static Box get settingsBox => Hive.box(settings);
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -41,6 +43,18 @@ class HiveBoxes {
         await Hive.deleteBoxFromDisk(planGroups);
       }
       await Hive.openBox<PlanGroup>(planGroups);
+    }
+
+    // 打开 settings（动态 box），用于保存当前分组 ID 等简单配置
+    try {
+      if (!Hive.isBoxOpen(settings)) {
+        await Hive.openBox(settings);
+      }
+    } catch (_) {
+      if (await Hive.boxExists(settings)) {
+        await Hive.deleteBoxFromDisk(settings);
+      }
+      await Hive.openBox(settings);
     }
   }
 }

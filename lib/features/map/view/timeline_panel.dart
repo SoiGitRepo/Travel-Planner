@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:travel_planner/core/widgets/glassy/glassy.dart';
 import '../../plan/data/plan_io.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/models/transport_mode.dart';
 import '../../../core/models/transport_segment.dart';
@@ -125,15 +126,24 @@ class TimelinePanel extends ConsumerWidget {
                                 label: const Text('添加日期计划'),
                               ),
                               TextButton.icon(
+                                onPressed: () {
+                                  context.push('/groups');
+                                },
+                                icon: const Icon(Icons.group),
+                                label: const Text('分组管理'),
+                              ),
+                              TextButton.icon(
                                 onPressed: () async {
                                   final group = planAsync.valueOrNull?.group;
                                   if (group == null) return;
                                   final io = const PlanIO();
                                   final path = await io.saveExportToFile(group);
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('已导出至文件：$path')),
-                                  );
+                                  final messenger = ScaffoldMessenger.maybeOf(context);
+                                  if (messenger != null) {
+                                    messenger.showSnackBar(
+                                      SnackBar(content: Text('已导出至文件：$path')),
+                                    );
+                                  }
                                 },
                                 icon: const Icon(Icons.download),
                                 label: const Text('导出JSON'),
@@ -170,15 +180,19 @@ class TimelinePanel extends ConsumerWidget {
                                     final io = const PlanIO();
                                     final group = await io.importFromJson(jsonStr);
                                     await ref.read(planControllerProvider.notifier).replaceGroup(group);
-                                    if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('导入成功')),
-                                    );
+                                    final messenger = ScaffoldMessenger.maybeOf(context);
+                                    if (messenger != null) {
+                                      messenger.showSnackBar(
+                                        const SnackBar(content: Text('导入成功')),
+                                      );
+                                    }
                                   } catch (e) {
-                                    if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('导入失败：$e')),
-                                    );
+                                    final messenger = ScaffoldMessenger.maybeOf(context);
+                                    if (messenger != null) {
+                                      messenger.showSnackBar(
+                                        SnackBar(content: Text('导入失败：$e')),
+                                      );
+                                    }
                                   }
                                 },
                                 icon: const Icon(Icons.upload),
