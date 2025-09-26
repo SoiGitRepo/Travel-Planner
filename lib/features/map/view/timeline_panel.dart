@@ -1,5 +1,8 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:travel_planner/core/widgets/glassy/glassy.dart';
 
 import '../../../core/models/transport_mode.dart';
@@ -42,8 +45,9 @@ class TimelinePanel extends ConsumerWidget {
             final bottomSafe = MediaQuery.of(context).padding.bottom;
             return Container(
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                color: Colors.transparent,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.08),
@@ -63,7 +67,9 @@ class TimelinePanel extends ConsumerWidget {
                       child: Container(
                         height: 6,
                         width: 56,
-                        decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(3)),
+                        decoration: BoxDecoration(
+                            color: Colors.black26,
+                            borderRadius: BorderRadius.circular(3)),
                       ),
                     ),
                   ),
@@ -82,7 +88,8 @@ class TimelinePanel extends ConsumerWidget {
                       if (selected == null) return const SizedBox.shrink();
                       final inPlan = selected.nodeId != null;
                       return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                         child: Card(
                           child: ListTile(
                             leading: const Icon(Icons.place),
@@ -95,25 +102,33 @@ class TimelinePanel extends ConsumerWidget {
                                 icon: Icon(inPlan ? Icons.remove : Icons.add),
                                 onPressed: () async {
                                   if (inPlan) {
-                                    await ref.read(planControllerProvider.notifier).deleteNode(selected.nodeId!);
+                                    await ref
+                                        .read(planControllerProvider.notifier)
+                                        .deleteNode(selected.nodeId!);
                                   } else {
-                                    await ref.read(planControllerProvider.notifier).addNodeAt(
+                                    await ref
+                                        .read(planControllerProvider.notifier)
+                                        .addNodeAt(
                                           selected.point,
                                           title: selected.title,
                                           mode: ref.read(transportModeProvider),
                                         );
                                   }
-                                  ref.read(selectedPlaceProvider.notifier).state = null;
+                                  ref
+                                      .read(selectedPlaceProvider.notifier)
+                                      .state = null;
                                 },
                               ),
                               IconButton(
                                 tooltip: '关闭',
                                 icon: const Icon(Icons.close),
-                                onPressed: () => ref.read(selectedPlaceProvider.notifier).state = null,
+                                onPressed: () => ref
+                                    .read(selectedPlaceProvider.notifier)
+                                    .state = null,
                               ),
                             ]),
                           ),
-                        ).glassy(borderRadius: 12),
+                        ),
                       );
                     }),
                   ),
@@ -134,11 +149,15 @@ class TimelinePanel extends ConsumerWidget {
                             background: Container(
                               color: Colors.red,
                               alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              child: const Icon(Icons.delete, color: Colors.white),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              child:
+                                  const Icon(Icons.delete, color: Colors.white),
                             ),
                             onDismissed: (_) async {
-                              await ref.read(planControllerProvider.notifier).deleteNode(n.id);
+                              await ref
+                                  .read(planControllerProvider.notifier)
+                                  .deleteNode(n.id);
                             },
                             child: ListTile(
                               leading: CircleAvatar(
@@ -151,7 +170,8 @@ class TimelinePanel extends ConsumerWidget {
                                 '${n.point.lat.toStringAsFixed(5)}, ${n.point.lng.toStringAsFixed(5)}  · 到达 $timeStr${n.stayDurationMinutes != null ? ' · 停留 ${n.stayDurationMinutes} 分钟' : ''}',
                               ),
                               onTap: () {
-                                ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
+                                ref.read(selectedPlaceProvider.notifier).state =
+                                    SelectedPlace(
                                   nodeId: n.id,
                                   title: n.title,
                                   point: n.point,
@@ -167,12 +187,24 @@ class TimelinePanel extends ConsumerWidget {
                                       final now = DateTime.now();
                                       final picked = await showTimePicker(
                                         context: context,
-                                        initialTime: TimeOfDay.fromDateTime(n.scheduledTime ?? now),
+                                        initialTime: TimeOfDay.fromDateTime(
+                                            n.scheduledTime ?? now),
                                       );
                                       if (picked != null) {
-                                        final day = planAsync.value!.currentPlan.date;
-                                        final arrival = DateTime(day.year, day.month, day.day, picked.hour, picked.minute);
-                                        await ref.read(planControllerProvider.notifier).updateNodeSchedule(nodeId: n.id, arrivalTime: arrival);
+                                        final day =
+                                            planAsync.value!.currentPlan.date;
+                                        final arrival = DateTime(
+                                            day.year,
+                                            day.month,
+                                            day.day,
+                                            picked.hour,
+                                            picked.minute);
+                                        await ref
+                                            .read(
+                                                planControllerProvider.notifier)
+                                            .updateNodeSchedule(
+                                                nodeId: n.id,
+                                                arrivalTime: arrival);
                                       }
                                     },
                                   ),
@@ -180,7 +212,9 @@ class TimelinePanel extends ConsumerWidget {
                                     tooltip: '设置停留时长',
                                     icon: const Icon(Icons.timelapse),
                                     onPressed: () async {
-                                      final controller = TextEditingController(text: (n.stayDurationMinutes ?? '').toString());
+                                      final controller = TextEditingController(
+                                          text: (n.stayDurationMinutes ?? '')
+                                              .toString());
                                       final minutes = await showDialog<int?>(
                                         context: context,
                                         builder: (ctx) => AlertDialog(
@@ -188,19 +222,31 @@ class TimelinePanel extends ConsumerWidget {
                                           content: TextField(
                                             controller: controller,
                                             keyboardType: TextInputType.number,
-                                            decoration: const InputDecoration(hintText: '例如 60'),
+                                            decoration: const InputDecoration(
+                                                hintText: '例如 60'),
                                           ),
                                           actions: [
-                                            TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('取消')),
                                             TextButton(
-                                              onPressed: () => Navigator.pop(ctx, int.tryParse(controller.text.trim())),
+                                                onPressed: () =>
+                                                    Navigator.pop(ctx, null),
+                                                child: const Text('取消')),
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(
+                                                  ctx,
+                                                  int.tryParse(
+                                                      controller.text.trim())),
                                               child: const Text('确定'),
                                             ),
                                           ],
                                         ),
                                       );
                                       if (minutes != null) {
-                                        await ref.read(planControllerProvider.notifier).updateNodeSchedule(nodeId: n.id, stayMinutes: minutes);
+                                        await ref
+                                            .read(
+                                                planControllerProvider.notifier)
+                                            .updateNodeSchedule(
+                                                nodeId: n.id,
+                                                stayMinutes: minutes);
                                       }
                                     },
                                   ),
@@ -214,7 +260,8 @@ class TimelinePanel extends ConsumerWidget {
                           final toNode = nodes[segIndex + 1];
                           TransportSegment? seg;
                           for (final s in segs) {
-                            if (s.fromNodeId == fromNode.id && s.toNodeId == toNode.id) {
+                            if (s.fromNodeId == fromNode.id &&
+                                s.toNodeId == toNode.id) {
                               seg = s;
                               break;
                             }
@@ -228,7 +275,8 @@ class TimelinePanel extends ConsumerWidget {
                               : (est != null ? '预估 $est 分钟' : '无预估，直线连接');
                           return ListTile(
                             dense: true,
-                            leading: const Icon(Icons.more_horiz, color: Colors.grey),
+                            leading: const Icon(Icons.more_horiz,
+                                color: Colors.grey),
                             title: Text('交通：${segNN.mode.name}'),
                             subtitle: Text(subtitle),
                             trailing: Wrap(
@@ -239,7 +287,10 @@ class TimelinePanel extends ConsumerWidget {
                                   icon: const Icon(Icons.edit),
                                   onPressed: () async {
                                     final controller = TextEditingController(
-                                      text: (segNN.userDurationMinutes ?? segNN.estimatedDurationMinutes ?? '').toString(),
+                                      text: (segNN.userDurationMinutes ??
+                                              segNN.estimatedDurationMinutes ??
+                                              '')
+                                          .toString(),
                                     );
                                     final minutes = await showDialog<int?>(
                                       context: context,
@@ -249,16 +300,19 @@ class TimelinePanel extends ConsumerWidget {
                                           content: TextField(
                                             controller: controller,
                                             keyboardType: TextInputType.number,
-                                            decoration: const InputDecoration(hintText: '请输入分钟数，例如 15'),
+                                            decoration: const InputDecoration(
+                                                hintText: '请输入分钟数，例如 15'),
                                           ),
                                           actions: [
                                             TextButton(
-                                              onPressed: () => Navigator.of(ctx).pop(null),
+                                              onPressed: () =>
+                                                  Navigator.of(ctx).pop(null),
                                               child: const Text('取消'),
                                             ),
                                             TextButton(
                                               onPressed: () {
-                                                final v = int.tryParse(controller.text.trim());
+                                                final v = int.tryParse(
+                                                    controller.text.trim());
                                                 Navigator.of(ctx).pop(v);
                                               },
                                               child: const Text('确定'),
@@ -268,7 +322,11 @@ class TimelinePanel extends ConsumerWidget {
                                       },
                                     );
                                     if (minutes != null) {
-                                      await ref.read(planControllerProvider.notifier).setSegmentUserDuration(segmentId: segNN.id, minutes: minutes);
+                                      await ref
+                                          .read(planControllerProvider.notifier)
+                                          .setSegmentUserDuration(
+                                              segmentId: segNN.id,
+                                              minutes: minutes);
                                     }
                                   },
                                 ),
@@ -277,18 +335,31 @@ class TimelinePanel extends ConsumerWidget {
                                     tooltip: '清除我的时长',
                                     icon: const Icon(Icons.clear),
                                     onPressed: () async {
-                                      await ref.read(planControllerProvider.notifier).setSegmentUserDuration(segmentId: segNN.id, minutes: null);
+                                      await ref
+                                          .read(planControllerProvider.notifier)
+                                          .setSegmentUserDuration(
+                                              segmentId: segNN.id,
+                                              minutes: null);
                                     },
                                   ),
                                 PopupMenuButton<TransportMode>(
                                   tooltip: '切换交通方式',
                                   onSelected: (m) async {
-                                    await ref.read(planControllerProvider.notifier).setSegmentMode(segmentId: segNN.id, mode: m);
+                                    await ref
+                                        .read(planControllerProvider.notifier)
+                                        .setSegmentMode(
+                                            segmentId: segNN.id, mode: m);
                                   },
                                   itemBuilder: (ctx) => const [
-                                    PopupMenuItem(value: TransportMode.walking, child: Text('步行')),
-                                    PopupMenuItem(value: TransportMode.driving, child: Text('驾车')),
-                                    PopupMenuItem(value: TransportMode.transit, child: Text('公共交通')),
+                                    PopupMenuItem(
+                                        value: TransportMode.walking,
+                                        child: Text('步行')),
+                                    PopupMenuItem(
+                                        value: TransportMode.driving,
+                                        child: Text('驾车')),
+                                    PopupMenuItem(
+                                        value: TransportMode.transit,
+                                        child: Text('公共交通')),
                                   ],
                                   icon: const Icon(Icons.alt_route),
                                 ),
@@ -301,6 +372,17 @@ class TimelinePanel extends ConsumerWidget {
                     ),
                   ),
                 ],
+              ),
+            ).glassy(
+              borderRadius: 40,
+              settings: const LiquidGlassSettings(
+                blur: 4,
+                thickness: 60,
+                blend: 40,
+                lightAngle: 0.3 * pi,
+                lightIntensity: 0.5,
+                saturation: 0.5,
+                lightness: 0.5,
               ),
             );
           },

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:travel_planner/core/widgets/glassy/glassy.dart';
 import 'package:google_api_availability/google_api_availability.dart';
 
@@ -48,7 +49,8 @@ class _MapPageState extends ConsumerState<MapPage> {
             : now.difference(_lastAnimateAt!);
         const snaps = [0.12, 0.6, 0.9];
         final nearSnap = snaps.any((s) => (size - s).abs() < 0.02);
-        final shouldAnimate = nearSnap || delta > 0.08 || since.inMilliseconds > 320;
+        final shouldAnimate =
+            nearSnap || delta > 0.08 || since.inMilliseconds > 320;
         _fitToNodes(context, animate: shouldAnimate);
         if (shouldAnimate) {
           _lastAnimateAt = now;
@@ -271,8 +273,9 @@ class _MapPageState extends ConsumerState<MapPage> {
             left: 12,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
+                backgroundColor: Colors.transparent,
                 foregroundColor: Colors.black87,
+                shadowColor: Colors.transparent,
                 elevation: 2,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -282,7 +285,13 @@ class _MapPageState extends ConsumerState<MapPage> {
               onPressed: () => _fitToNodes(context),
               icon: const Icon(Icons.center_focus_strong),
               label: const Text('适配视野'),
-            ).glassy(borderRadius: 12),
+            ).glassy(
+              borderRadius: 12,
+              // glassContainsChild: true,
+              settings: const LiquidGlassSettings(
+                blur: 1,
+              ),
+            ),
           ),
           TimelinePanel(controller: _sheetController),
           if (planAsync.isLoading)
