@@ -59,7 +59,9 @@ class TransportSegmentAdapter extends TypeAdapter<TransportSegment> {
     final id = reader.readString();
     final fromNodeId = reader.readString();
     final toNodeId = reader.readString();
-    final mode = TransportModeAdapter().read(reader);
+    // 重要：与 write 中的 writer.write(obj.mode) 对应，
+    // 嵌套类型统一使用 reader.read() 以消费 typeId。
+    final mode = reader.read() as TransportMode;
     final hasUser = reader.readBool();
     final userDur = hasUser ? reader.readInt() : null;
     final hasEst = reader.readBool();
@@ -70,7 +72,8 @@ class TransportSegmentAdapter extends TypeAdapter<TransportSegment> {
     List<LatLngPoint>? path;
     if (hasPath) {
       final len = reader.readInt();
-      path = List.generate(len, (_) => LatLngPointAdapter().read(reader));
+      // 与 write 中的 writer.write(p) 保持一致，使用 reader.read()
+      path = List.generate(len, (_) => reader.read() as LatLngPoint);
     }
     return TransportSegment(
       id: id,

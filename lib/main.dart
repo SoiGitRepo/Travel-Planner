@@ -6,7 +6,8 @@ import 'app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await HiveBoxes.init();
+  // 先加载环境变量，供 Hive 初始化时读取开关
   await dotenv.load(fileName: 'assets/env/.env');
+  await HiveBoxes.init();
   runApp(const ProviderScope(child: App()));
 }
