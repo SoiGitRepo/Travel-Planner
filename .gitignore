@@ -5,9 +5,11 @@
 *.swp
 .DS_Store
 .atom/
+.build/
 .buildlog/
 .history
 .svn/
+.swiftpm/
 migrate_working_dir/
 
 # IntelliJ related
@@ -46,8 +48,14 @@ app.*.map.json
 plan.md
 .env*
 
+# iOS local environment (do not commit)
+ios/Runner/Environment.xcconfig
+
 # Android signing files (do not commit)
 /android/key.properties
 /android/app/*.keystore
 /android/app/*.jks
 /android/local.properties
+
+# FVM Version Cache
+.fvm/

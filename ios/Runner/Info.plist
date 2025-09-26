@@ -52,6 +52,6 @@
 	<string>需要访问您的位置信息以在地图上显示附近地点与路线。</string>
 	<!-- Google Maps API Key (set via AppDelegate or here). If using Info.plist key, set the value below. -->
 	<key>GMSApiKey</key>
-	<string></string>
+	<string>$(GMS_API_KEY)</string>
 </dict>
 </plist>
