@@ -50,10 +50,7 @@ android {
 
     signingConfigs {
         release {
-            if (keystoreProperties.isEmpty()) {
-                // Fallback to debug signing if no keystore provided
-                signingConfig = signingConfigs.debug
-            } else {
+            if (!keystoreProperties.isEmpty()) {
                 storeFile file(keystoreProperties['storeFile'])
                 storePassword keystoreProperties['storePassword']
                 keyAlias keystoreProperties['keyAlias']
@@ -73,7 +70,11 @@ android {
     buildTypes {
         release {
             // Sign release with configured keystore (falls back to debug if missing)
-            signingConfig signingConfigs.release
+            if (!keystoreProperties.isEmpty()) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
         }
         debug {
             // Also sign debug builds for easier API Key restriction setup

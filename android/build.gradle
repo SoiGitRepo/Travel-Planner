@@ -1,5 +1,10 @@
 allprojects {
     repositories {
+        // 优先使用国内镜像以规避 TLS 握手失败
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        // 备用官方源
         google()
         mavenCentral()
     }
