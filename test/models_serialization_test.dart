@@ -36,9 +36,9 @@ void main() {
 
   test('PlanGroup serialize/deserialize', () async {
     final box = await Hive.openBox<PlanGroup>('pg');
-    final n1 = const Node(id: 'n1', title: 'A', point: LatLngPoint(1, 2));
-    final n2 = const Node(id: 'n2', title: 'B', point: LatLngPoint(3, 4));
-    final seg = const TransportSegment(
+    const n1 = Node(id: 'n1', title: 'A', point: LatLngPoint(1, 2));
+    const n2 = Node(id: 'n2', title: 'B', point: LatLngPoint(3, 4));
+    const seg = TransportSegment(
       id: 's1',
       fromNodeId: 'n1',
       toNodeId: 'n2',
