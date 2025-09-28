@@ -18,7 +18,7 @@ class PlacesService {
 
   String? get _apiKey => dotenv.env['GOOGLE_PLACES_API_KEY'] ?? dotenv.env['GOOGLE_DIRECTIONS_API_KEY'];
 
-  Future<List<PlaceItem>> searchText(String query, {LatLngPoint? near}) async {
+  Future<List<PlaceItem>> searchText(String query, {LatLngPoint? near, int? radiusMeters}) async {
     // 无 Key 降级：返回空结果
     if (_apiKey == null || _apiKey!.isEmpty) return const [];
 
@@ -29,7 +29,9 @@ class PlacesService {
     };
     if (near != null) {
       params['location'] = '${near.lat},${near.lng}';
-      params['radius'] = '30000'; // 30km
+      params['radius'] = (radiusMeters != null && radiusMeters > 0)
+          ? radiusMeters.toString()
+          : '30000'; // 默认 30km
     }
     final uri = Uri.https('maps.googleapis.com', '/maps/api/place/textsearch/json', params);
     final resp = await http.get(uri);
