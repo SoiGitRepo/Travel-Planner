@@ -10,7 +10,20 @@ class PlaceItem {
   final String name;
   final String? address;
   final LatLngPoint location;
-  const PlaceItem({required this.id, required this.name, required this.location, this.address});
+  final double? rating; // 0~5
+  final int? userRatingsTotal;
+  final List<String> types;
+  final int? priceLevel; // 0~4
+  const PlaceItem({
+    required this.id,
+    required this.name,
+    required this.location,
+    this.address,
+    this.rating,
+    this.userRatingsTotal,
+    this.types = const [],
+    this.priceLevel,
+  });
 }
 
 class PlacesService {
@@ -46,7 +59,20 @@ class PlacesService {
       final geo = (m['geometry'] as Map<String, dynamic>?)?['location'] as Map<String, dynamic>?;
       final lat = (geo?['lat'] as num?)?.toDouble() ?? 0;
       final lng = (geo?['lng'] as num?)?.toDouble() ?? 0;
-      return PlaceItem(id: id, name: name, address: addr, location: LatLngPoint(lat, lng));
+      final rating = (m['rating'] as num?)?.toDouble();
+      final urt = (m['user_ratings_total'] as num?)?.toInt();
+      final types = ((m['types'] as List?) ?? const []).map((e) => (e as String?) ?? '').where((s) => s.isNotEmpty).toList(growable: false);
+      final price = (m['price_level'] as num?)?.toInt();
+      return PlaceItem(
+        id: id,
+        name: name,
+        address: addr,
+        location: LatLngPoint(lat, lng),
+        rating: rating,
+        userRatingsTotal: urt,
+        types: types,
+        priceLevel: price,
+      );
     }).toList(growable: false);
   }
 
@@ -75,7 +101,20 @@ class PlacesService {
       final geo = (m['geometry'] as Map<String, dynamic>?)?['location'] as Map<String, dynamic>?;
       final lat = (geo?['lat'] as num?)?.toDouble() ?? 0;
       final lng = (geo?['lng'] as num?)?.toDouble() ?? 0;
-      return PlaceItem(id: id, name: name, address: addr, location: LatLngPoint(lat, lng));
+      final rating = (m['rating'] as num?)?.toDouble();
+      final urt = (m['user_ratings_total'] as num?)?.toInt();
+      final types = ((m['types'] as List?) ?? const []).map((e) => (e as String?) ?? '').where((s) => s.isNotEmpty).toList(growable: false);
+      final price = (m['price_level'] as num?)?.toInt();
+      return PlaceItem(
+        id: id,
+        name: name,
+        address: addr,
+        location: LatLngPoint(lat, lng),
+        rating: rating,
+        userRatingsTotal: urt,
+        types: types,
+        priceLevel: price,
+      );
     }).toList(growable: false);
   }
 }

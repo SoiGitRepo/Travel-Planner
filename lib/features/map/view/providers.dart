@@ -39,6 +39,23 @@ class OverlayRenderItem {
 }
 final overlayRenderItemsProvider = StateProvider<List<OverlayRenderItem>>((ref) => const []);
 
+// 刷新节流状态（用于判断是否需要重新获取 Nearby）
+class OverlayRefreshState {
+  final LatLng center;
+  final double zoom;
+  final DateTime at;
+  const OverlayRefreshState({required this.center, required this.zoom, required this.at});
+}
+final overlayRefreshStateProvider = StateProvider<OverlayRefreshState?>((ref) => null);
+
+// 简单缓存（按量化后的中心+缩放+半径 key 缓存一段时间）
+class OverlayCacheEntry {
+  final List<PlaceItem> items;
+  final DateTime at;
+  const OverlayCacheEntry(this.items, this.at);
+}
+final overlayCacheProvider = StateProvider<Map<String, OverlayCacheEntry>>((ref) => <String, OverlayCacheEntry>{});
+
 class SelectedPlace {
   final String? nodeId; // 若为已在计划中的节点则有值
   final String? placeId; // 若来源于搜索结果则有值

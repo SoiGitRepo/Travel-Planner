@@ -99,19 +99,77 @@ class _MapPageState extends ConsumerState<MapPage> {
       maxCount = 80;
     }
 
+    // 节流：小幅移动或缩放微调且在短时间内，不触发请求（直接复用已有 overlayPlaces）
+    final last = ref.read(overlayRefreshStateProvider);
+    final now = DateTime.now();
+    if (last != null) {
+      final moved = haversine(center.latitude, center.longitude, last.center.latitude, last.center.longitude);
+      final zoomDelta = (z - last.zoom).abs();
+      final sinceMs = now.difference(last.at).inMilliseconds;
+      if (sinceMs < 1200 && moved < (radius * 0.15) && zoomDelta < 0.25) {
+        // 距离移动很小 + 缩放变化很小 + 时间很短：跳过网络请求
+        return;
+      }
+    }
+
+    // 缓存优先：按量化中心/缩放/半径 生成 key
+    String _keyFor(double lat, double lng, double zoom, int r) {
+      final qLat = lat.toStringAsFixed(3);
+      final qLng = lng.toStringAsFixed(3);
+      final zBucket = zoom.floor();
+      final rBucket = ((r / 100).round() * 100);
+      return 'z:$zBucket;lat:$qLat;lng:$qLng;r:$rBucket';
+    }
+    final cache = ref.read(overlayCacheProvider);
+    final key = _keyFor(center.latitude, center.longitude, z, radius);
+    final hit = cache[key];
+    const ttl = Duration(seconds: 30);
+    if (hit != null && now.difference(hit.at) < ttl) {
+      ref.read(overlayPlacesProvider.notifier).state = hit.items;
+      // 更新刷新状态，但不触发网络
+      ref.read(overlayRefreshStateProvider.notifier).state = OverlayRefreshState(center: center, zoom: z, at: now);
+      return;
+    }
+
     final ps = ref.read(placesServiceProvider);
     final items = await ps.searchNearby(
       model.LatLngPoint(center.latitude, center.longitude),
       radiusMeters: radius,
     );
-    // 距离排序，截断到 maxCount 的 2 倍，留给布局裁剪
-    items.sort((a, b) {
-      final da = haversine(center.latitude, center.longitude, a.location.lat, a.location.lng);
-      final db = haversine(center.latitude, center.longitude, b.location.lat, b.location.lng);
-      return da.compareTo(db);
-    });
+    // 综合排序：评分/评价数/类型权重为主，距离为次
+    double _typeWeight(List<String> types) {
+      const weights = {
+        'tourist_attraction': 1.0,
+        'point_of_interest': 0.6,
+        'museum': 0.9,
+        'park': 0.8,
+        'art_gallery': 0.8,
+        'restaurant': 0.6,
+        'cafe': 0.5,
+        'shopping_mall': 0.5,
+      };
+      double w = 0.0;
+      for (final t in types) {
+        w = w < (weights[t] ?? 0.0) ? (weights[t] ?? 0.0) : w;
+      }
+      return w;
+    }
+    double _scoreFor(a) {
+      final d = haversine(center.latitude, center.longitude, a.location.lat, a.location.lng);
+      final rating = (a.rating ?? 0.0).clamp(0.0, 5.0);
+      final urt = (a.userRatingsTotal ?? 0);
+      final typeW = _typeWeight(a.types);
+      final pop = rating * 2.0 + (urt > 0 ? (1.0 * (urt.toDouble()).clamp(0, 5000) / 5000.0) : 0.0);
+      final distPenalty = (d / (radius.toDouble() + 1)).clamp(0.0, 1.0);
+      return pop + typeW - distPenalty; // 值越大越靠前
+    }
+    items.sort((a, b) => _scoreFor(b).compareTo(_scoreFor(a)));
     final trimmed = items.take(maxCount * 2).toList(growable: false);
     ref.read(overlayPlacesProvider.notifier).state = trimmed;
+    // 写入缓存与刷新状态
+    final newCache = {...cache, key: OverlayCacheEntry(trimmed, now)};
+    ref.read(overlayCacheProvider.notifier).state = newCache;
+    ref.read(overlayRefreshStateProvider.notifier).state = OverlayRefreshState(center: center, zoom: z, at: now);
   }
 
   // 将候选 places 计算为像素坐标并进行网格化碰撞裁剪
@@ -119,6 +177,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     final c = ref.read(mapControllerProvider);
     if (c == null) return;
     final list = ref.read(overlayPlacesProvider);
+    final selected = ref.read(selectedPlaceProvider);
     if (list.isEmpty) {
       ref.read(overlayRenderItemsProvider.notifier).state = const [];
       return;
@@ -148,6 +207,9 @@ class _MapPageState extends ConsumerState<MapPage> {
     final slots = <String>{};
     final results = <OverlayRenderItem>[];
     for (final p in list) {
+      if (selected?.placeId != null && p.id == selected!.placeId) {
+        continue; // 选中项交由 PlaceOverlayLayer 渲染
+      }
       try {
         final sc = await c.getScreenCoordinate(LatLng(p.location.lat, p.location.lng));
         final x = sc.x.toDouble();
