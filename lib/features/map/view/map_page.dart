@@ -10,10 +10,12 @@ import 'package:google_api_availability/google_api_availability.dart';
 
 import '../../../core/models/latlng_point.dart' as model;
 import '../../../core/providers.dart';
+import '../../../core/utils/haversine.dart';
 import '../../plan/presentation/plan_controller.dart';
 import 'providers.dart';
 import 'timeline_panel.dart';
 import 'place_overlay_layer.dart';
+import 'place_dense_overlay_layer.dart';
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
@@ -64,6 +66,106 @@ class _MapPageState extends ConsumerState<MapPage> {
         _lastSheetSize = size;
       });
     });
+  }
+
+  // 根据相机状态与可见范围刷新用于密集覆盖层的附近 places
+  Future<void> _refreshOverlayPlaces(BuildContext context) async {
+    final c = ref.read(mapControllerProvider);
+    if (c == null) return;
+    final bounds = ref.read(visibleRegionProvider);
+    final pos = ref.read(cameraPositionProvider);
+    if (bounds == null) return;
+
+    final center = LatLng(
+      (bounds.southwest.latitude + bounds.northeast.latitude) / 2,
+      (bounds.southwest.longitude + bounds.northeast.longitude) / 2,
+    );
+    final r1 = haversine(center.latitude, center.longitude, bounds.northeast.latitude, bounds.northeast.longitude);
+    final r2 = haversine(center.latitude, center.longitude, bounds.southwest.latitude, bounds.southwest.longitude);
+    final radius = (0.5 * (r1 + r2)).clamp(100.0, 2500.0).toInt();
+
+    // 按缩放控制预期数量上限
+    final z = pos?.zoom ?? 14.0;
+    int maxCount;
+    if (z < 11) {
+      maxCount = 20;
+    } else if (z < 13) {
+      maxCount = 30;
+    } else if (z < 15) {
+      maxCount = 45;
+    } else if (z < 17) {
+      maxCount = 60;
+    } else {
+      maxCount = 80;
+    }
+
+    final ps = ref.read(placesServiceProvider);
+    final items = await ps.searchNearby(
+      model.LatLngPoint(center.latitude, center.longitude),
+      radiusMeters: radius,
+    );
+    // 距离排序，截断到 maxCount 的 2 倍，留给布局裁剪
+    items.sort((a, b) {
+      final da = haversine(center.latitude, center.longitude, a.location.lat, a.location.lng);
+      final db = haversine(center.latitude, center.longitude, b.location.lat, b.location.lng);
+      return da.compareTo(db);
+    });
+    final trimmed = items.take(maxCount * 2).toList(growable: false);
+    ref.read(overlayPlacesProvider.notifier).state = trimmed;
+  }
+
+  // 将候选 places 计算为像素坐标并进行网格化碰撞裁剪
+  Future<void> _layoutOverlayItems(BuildContext context) async {
+    final c = ref.read(mapControllerProvider);
+    if (c == null) return;
+    final list = ref.read(overlayPlacesProvider);
+    if (list.isEmpty) {
+      ref.read(overlayRenderItemsProvider.notifier).state = const [];
+      return;
+    }
+    final size = MediaQuery.of(context).size;
+    final fraction = ref.read(sheetFractionProvider).clamp(0.0, 0.95);
+    final usableHeight = size.height * (1 - fraction) - 8; // 底部上方留白
+    final statusBar = MediaQuery.of(context).padding.top;
+    final leftPad = 0.0, rightPad = 0.0, topPad = statusBar + 8.0;
+    final cellW = 96.0, cellH = 48.0;
+
+    // maxCount 与 _refreshOverlayPlaces 中一致
+    final z = ref.read(cameraPositionProvider)?.zoom ?? 14.0;
+    int maxCount;
+    if (z < 11) {
+      maxCount = 20;
+    } else if (z < 13) {
+      maxCount = 30;
+    } else if (z < 15) {
+      maxCount = 45;
+    } else if (z < 17) {
+      maxCount = 60;
+    } else {
+      maxCount = 80;
+    }
+
+    final slots = <String>{};
+    final results = <OverlayRenderItem>[];
+    for (final p in list) {
+      try {
+        final sc = await c.getScreenCoordinate(LatLng(p.location.lat, p.location.lng));
+        final x = sc.x.toDouble();
+        final y = sc.y.toDouble();
+        if (x < leftPad || x > size.width - rightPad) continue;
+        if (y < topPad || y > usableHeight) continue;
+        final gx = (x / cellW).floor();
+        final gy = (y / cellH).floor();
+        final key = '$gx:$gy';
+        if (slots.contains(key)) continue; // 已占用
+        slots.add(key);
+        results.add(OverlayRenderItem(place: p, pos: OverlayPos(x, y)));
+        if (results.length >= maxCount) break;
+      } catch (_) {
+        // 忽略无法转换的点
+      }
+    }
+    ref.read(overlayRenderItemsProvider.notifier).state = results;
   }
 
   @override
@@ -366,6 +468,9 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
                 } catch (_) {}
               }
+              // 刷新密集覆盖层候选与布局
+              await _refreshOverlayPlaces(context);
+              await _layoutOverlayItems(context);
             },
             onTap: (latLng) async {
               // 地图点击：附近检索 place（优先），无结果则回退经纬度
@@ -421,6 +526,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       body: Stack(
         children: [
           mapWidget,
+          const PlaceDenseOverlayLayer(),
           const PlaceOverlayLayer(),
           Positioned(
             top: MediaQuery.of(context).padding.top + 12,

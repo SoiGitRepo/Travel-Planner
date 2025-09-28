@@ -28,6 +28,17 @@ class OverlayPos {
 }
 final selectedOverlayPosProvider = StateProvider<OverlayPos?>((ref) => null);
 
+// 密集覆盖层候选 place 列表（按相机缩放/范围动态刷新）
+final overlayPlacesProvider = StateProvider<List<PlaceItem>>((ref) => const []);
+
+// 用于渲染的覆盖层条目（已包含像素坐标与碰撞裁剪后的结果）
+class OverlayRenderItem {
+  final PlaceItem place;
+  final OverlayPos pos;
+  const OverlayRenderItem({required this.place, required this.pos});
+}
+final overlayRenderItemsProvider = StateProvider<List<OverlayRenderItem>>((ref) => const []);
+
 class SelectedPlace {
   final String? nodeId; // 若为已在计划中的节点则有值
   final String? placeId; // 若来源于搜索结果则有值
