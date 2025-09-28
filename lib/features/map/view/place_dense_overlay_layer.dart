@@ -12,14 +12,15 @@ class PlaceDenseOverlayLayer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final items = ref.watch(overlayRenderItemsProvider);
+    final shift = ref.watch(overlayShiftProvider);
     if (items.isEmpty) return const SizedBox.shrink();
 
     final children = <Widget>[];
     for (final it in items) {
       final x = it.pos.x;
       final y = it.pos.y;
-      final left = x - 36; // 让标记稍微居中
-      final top = y - 54; // 文字在上，icon 在下
+      final left = x + shift.x - 36; // 让标记稍微居中
+      final top = y + shift.y - 54; // 文字在上，icon 在下
       children.add(
         Positioned(
           left: left,

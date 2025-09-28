@@ -31,6 +31,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   // 去除拖动结束后的二次动画，改为在接近吸附档位时直接使用动画，避免“两段式”停顿
   DateTime? _lastAnimateAt; // 上一次使用 animate 的时间
   double _lastSheetSize = 0.2; // 记录上一次的面板比例
+  DateTime? _lastLayoutAt; // 上一次在相机移动中触发布局的时间
   static const _initialPosition = CameraPosition(
     target: LatLng(37.7749, -122.4194), // San Francisco default
     zoom: 12,
@@ -535,6 +536,31 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
                 } catch (_) {}
               }
+              // 让密集覆盖层在相机移动时也能跟随（不触发网络，仅重算像素位置），做简单节流
+              final now = DateTime.now();
+              final since = _lastLayoutAt == null ? const Duration(milliseconds: 999) : now.difference(_lastLayoutAt!);
+              if (since.inMilliseconds > 120) {
+                unawaited(_layoutOverlayItems(context));
+                _lastLayoutAt = now;
+              }
+
+              // 基于相机 target 的屏幕像素做整体位移，提升跟手性
+              if (c != null) {
+                try {
+                  final sc = await c.getScreenCoordinate(LatLng(pos.target.latitude, pos.target.longitude));
+                  final current = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
+                  final base = ref.read(centerScreenPosProvider);
+                  if (base == null) {
+                    // 本次移动的起点
+                    ref.read(centerScreenPosProvider.notifier).state = current;
+                    ref.read(overlayShiftProvider.notifier).state = const OverlayPos(0, 0);
+                  } else {
+                    final dx = current.x - base.x;
+                    final dy = current.y - base.y;
+                    ref.read(overlayShiftProvider.notifier).state = OverlayPos(dx, dy);
+                  }
+                } catch (_) {}
+              }
             },
             onCameraIdle: () async {
               final controller = ref.read(mapControllerProvider);
@@ -556,6 +582,9 @@ class _MapPageState extends ConsumerState<MapPage> {
               // 刷新密集覆盖层候选与布局
               await _refreshOverlayPlaces(context);
               await _layoutOverlayItems(context);
+              // 重置位移与基线
+              ref.read(centerScreenPosProvider.notifier).state = null;
+              ref.read(overlayShiftProvider.notifier).state = const OverlayPos(0, 0);
             },
             onTap: (latLng) async {
               // 地图点击：附近检索 place（优先），无结果则回退经纬度
