@@ -11,6 +11,11 @@ class PlanRepository {
   Box<PlanGroup> get _box => HiveBoxes.planGroupsBox;
   Box get _settings => HiveBoxes.settingsBox;
 
+  // 供测试覆写的缺省加载方法：默认委托到 loadOrCreateCurrent
+  Future<PlanGroup> loadOrCreateDefault() async {
+    return loadOrCreateCurrent();
+  }
+
   Future<PlanGroup> loadOrCreateCurrent() async {
     // 优先使用 settings 中保存的当前分组
     final currentId = _settings.get(_currentGroupIdKey) as String?;

@@ -81,6 +81,16 @@ fvm flutter test integration_test -d emulator-5554 -r compact
 - 计划分组/多日切换与管理界面
 - 抽象地图与路线服务环境切换，接入高德地图
 
+### 覆盖层开关与回退
+
+- 右上角按钮可快速开/关“自定义 POI 覆盖层”（`PlaceDenseOverlayLayer` 与 `PlaceOverlayLayer`）。
+- 关闭后：
+  - 不再发起附近 Places 检索与覆盖层布局；
+  - 地图上仅保留原生 Marker/Polyline 渲染；
+  - 便于在出现性能或显示问题时快速回退与对比。
+- Provider：`overlayEnabledProvider`（位于 `lib/features/map/view/providers.dart`）。
+- 默认：开启。可配合 `onMapCreated -> setMapStyle` 隐藏默认 POI 图层，避免与覆盖层重叠。
+
 ### 搜索（Places，可选）
 
 在 `assets/env/.env` 配置 `GOOGLE_PLACES_API_KEY` 可启用地点搜索功能（页面路径 `/search`）：

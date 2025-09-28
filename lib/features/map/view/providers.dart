@@ -13,6 +13,8 @@ final transportModeProvider = StateProvider<TransportMode>((ref) => TransportMod
 final sheetFractionProvider = StateProvider<double>((ref) => 0.2);
 // 地图提供方切换：当 Google Play 服务不可用时切换为高德地图
 final useAmapProvider = StateProvider<bool>((ref) => false);
+// 自定义覆盖层特性开关：关闭后不渲染覆盖层且不触发相关刷新/布局
+final overlayEnabledProvider = StateProvider<bool>((ref) => true);
 
 // 底部面板当前页
 enum PanelPage { timeline, search, detail }

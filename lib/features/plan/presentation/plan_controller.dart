@@ -28,7 +28,7 @@ class PlanController extends AsyncNotifier<PlanState> {
   @override
   Future<PlanState> build() async {
     _repo = ref.read(planRepositoryProvider);
-    final group = await _repo.loadOrCreateCurrent();
+    final group = await _repo.loadOrCreateDefault();
     return PlanState(group: group, currentPlanIndex: 0);
   }
 

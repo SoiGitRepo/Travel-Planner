@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../../plan/presentation/plan_controller.dart';
 import 'providers.dart';
@@ -19,6 +20,8 @@ class PlaceDetailPanel extends ConsumerWidget {
     final detailsAsync = selected.placeId == null
         ? const AsyncValue<Never>.loading()
         : ref.watch(placeDetailsProvider(selected.placeId!));
+    final hasPlacesKey = (dotenv.env['GOOGLE_PLACES_API_KEY']?.isNotEmpty ?? false) ||
+        (dotenv.env['GOOGLE_DIRECTIONS_API_KEY']?.isNotEmpty ?? false);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -28,6 +31,29 @@ class PlaceDetailPanel extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (selected.placeId != null && !hasPlacesKey)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.withOpacity(0.4)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.orange, size: 18),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '未检测到 Places API Key，详情与图片可能不可用。请在 assets/env/.env 配置 GOOGLE_PLACES_API_KEY。',
+                          style: TextStyle(color: Colors.orange),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               Row(
                 children: [
                   const Icon(Icons.place),

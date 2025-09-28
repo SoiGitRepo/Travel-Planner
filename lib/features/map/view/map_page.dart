@@ -17,6 +17,7 @@ import 'providers.dart';
 import 'timeline_panel.dart';
 import 'place_overlay_layer.dart';
 import 'place_dense_overlay_layer.dart';
+import 'marker_icons.dart';
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
@@ -36,6 +37,55 @@ class _MapPageState extends ConsumerState<MapPage> {
     target: LatLng(37.7749, -122.4194), // San Francisco default
     zoom: 12,
   );
+
+  // 隐藏默认 POI 图层，避免与自定义覆盖层重叠
+  static const _mapStyleHidePoi = '[{"featureType":"poi","stylers":[{"visibility":"off"}]}]';
+
+  // 自定义图标缓存（按主类型）
+  final Map<String, BitmapDescriptor> _typeIconCache = {};
+  final Set<String> _pendingIconKeys = {};
+
+  String _mainTypeKey(List<String> types) {
+    if (types.contains('tourist_attraction')) return 'tourist_attraction';
+    if (types.contains('museum')) return 'museum';
+    if (types.contains('art_gallery')) return 'art_gallery';
+    if (types.contains('park')) return 'park';
+    if (types.contains('restaurant')) return 'restaurant';
+    if (types.contains('cafe')) return 'cafe';
+    if (types.contains('shopping_mall')) return 'shopping_mall';
+    return 'default';
+  }
+
+  (IconData, Color) _iconForType(String key) {
+    switch (key) {
+      case 'tourist_attraction':
+        return (Icons.attractions, Colors.orange);
+      case 'museum':
+        return (Icons.museum, Colors.brown);
+      case 'art_gallery':
+        return (Icons.brush, Colors.deepPurple);
+      case 'park':
+        return (Icons.park, Colors.green);
+      case 'restaurant':
+        return (Icons.restaurant, Colors.redAccent);
+      case 'cafe':
+        return (Icons.local_cafe, Colors.brown);
+      case 'shopping_mall':
+        return (Icons.local_mall, Colors.indigo);
+      default:
+        return (Icons.place, Colors.blueGrey);
+    }
+  }
+
+  Future<void> _ensureIconBuilt(String key) async {
+    if (_typeIconCache.containsKey(key) || _pendingIconKeys.contains(key)) return;
+    _pendingIconKeys.add(key);
+    final (iconData, bg) = _iconForType(key);
+    final bmp = await MarkerIconFactory.create(icon: iconData, background: bg, foreground: Colors.white, size: 112);
+    _typeIconCache[key] = bmp;
+    _pendingIconKeys.remove(key);
+    if (mounted) setState(() {});
+  }
 
   // 注意：不要在 initState 使用 ref.listen（Riverpod 限制）。
 
@@ -385,6 +435,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     final useAmap = ref.watch(useAmapProvider);
     final searchResults = ref.watch(searchResultsProvider);
     final selected = ref.watch(selectedPlaceProvider);
+    final overlayEnabled = ref.watch(overlayEnabledProvider);
 
     final markers = <Marker>{};
     final polylines = <Polyline>{};
@@ -447,13 +498,20 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     // 搜索结果标记
     for (final p in searchResults) {
+      final typeKey = _mainTypeKey(p.types);
+      final custom = _typeIconCache[typeKey];
+      // 异步准备图标（未完成前回退默认）
+      if (custom == null) {
+        // 不阻塞 UI，生成后刷新
+        unawaited(_ensureIconBuilt(typeKey));
+      }
       markers.add(Marker(
         markerId: MarkerId('search_${p.id}'),
         position: LatLng(p.location.lat, p.location.lng),
         infoWindow: InfoWindow(title: p.name),
-        icon: BitmapDescriptor.defaultMarkerWithHue(
-          (selected?.placeId == p.id) ? BitmapDescriptor.hueGreen : BitmapDescriptor.hueRose,
-        ),
+        icon: (selected?.placeId == p.id)
+            ? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen)
+            : (custom ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
         onTap: () {
           ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
             placeId: p.id,
@@ -516,6 +574,12 @@ class _MapPageState extends ConsumerState<MapPage> {
             polylines: polylines,
             onMapCreated: (controller) {
               ref.read(mapControllerProvider.notifier).state = controller;
+              // 应用样式：隐藏默认 POI 图层
+              () async {
+                try {
+                  await controller.setMapStyle(_mapStyleHidePoi);
+                } catch (_) {}
+              }();
               // 初始化可见区域
               Future.delayed(const Duration(milliseconds: 50), () async {
                 try {
@@ -536,30 +600,33 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
                 } catch (_) {}
               }
-              // 让密集覆盖层在相机移动时也能跟随（不触发网络，仅重算像素位置），做简单节流
-              final now = DateTime.now();
-              final since = _lastLayoutAt == null ? const Duration(milliseconds: 999) : now.difference(_lastLayoutAt!);
-              if (since.inMilliseconds > 120) {
-                unawaited(_layoutOverlayItems(context));
-                _lastLayoutAt = now;
-              }
+              // 覆盖层开启时才进行布局与整体位移
+              if (ref.read(overlayEnabledProvider)) {
+                // 让密集覆盖层在相机移动时也能跟随（不触发网络，仅重算像素位置），做简单节流
+                final now = DateTime.now();
+                final since = _lastLayoutAt == null ? const Duration(milliseconds: 999) : now.difference(_lastLayoutAt!);
+                if (since.inMilliseconds > 120) {
+                  unawaited(_layoutOverlayItems(context));
+                  _lastLayoutAt = now;
+                }
 
-              // 基于相机 target 的屏幕像素做整体位移，提升跟手性
-              if (c != null) {
-                try {
-                  final sc = await c.getScreenCoordinate(LatLng(pos.target.latitude, pos.target.longitude));
-                  final current = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
-                  final base = ref.read(centerScreenPosProvider);
-                  if (base == null) {
-                    // 本次移动的起点
-                    ref.read(centerScreenPosProvider.notifier).state = current;
-                    ref.read(overlayShiftProvider.notifier).state = const OverlayPos(0, 0);
-                  } else {
-                    final dx = current.x - base.x;
-                    final dy = current.y - base.y;
-                    ref.read(overlayShiftProvider.notifier).state = OverlayPos(dx, dy);
-                  }
-                } catch (_) {}
+                // 基于相机 target 的屏幕像素做整体位移，提升跟手性
+                if (c != null) {
+                  try {
+                    final sc = await c.getScreenCoordinate(LatLng(pos.target.latitude, pos.target.longitude));
+                    final current = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
+                    final base = ref.read(centerScreenPosProvider);
+                    if (base == null) {
+                      // 本次移动的起点
+                      ref.read(centerScreenPosProvider.notifier).state = current;
+                      ref.read(overlayShiftProvider.notifier).state = const OverlayPos(0, 0);
+                    } else {
+                      final dx = current.x - base.x;
+                      final dy = current.y - base.y;
+                      ref.read(overlayShiftProvider.notifier).state = OverlayPos(dx, dy);
+                    }
+                  } catch (_) {}
+                }
               }
             },
             onCameraIdle: () async {
@@ -579,12 +646,14 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
                 } catch (_) {}
               }
-              // 刷新密集覆盖层候选与布局
-              await _refreshOverlayPlaces(context);
-              await _layoutOverlayItems(context);
-              // 重置位移与基线
-              ref.read(centerScreenPosProvider.notifier).state = null;
-              ref.read(overlayShiftProvider.notifier).state = const OverlayPos(0, 0);
+              // 刷新密集覆盖层候选与布局（仅在开启时）
+              if (ref.read(overlayEnabledProvider)) {
+                await _refreshOverlayPlaces(context);
+                await _layoutOverlayItems(context);
+                // 重置位移与基线
+                ref.read(centerScreenPosProvider.notifier).state = null;
+                ref.read(overlayShiftProvider.notifier).state = const OverlayPos(0, 0);
+              }
             },
             onTap: (latLng) async {
               // 地图点击：附近检索 place（优先），无结果则回退经纬度
@@ -640,8 +709,8 @@ class _MapPageState extends ConsumerState<MapPage> {
       body: Stack(
         children: [
           mapWidget,
-          const PlaceDenseOverlayLayer(),
-          const PlaceOverlayLayer(),
+          if (ref.watch(overlayEnabledProvider)) const PlaceDenseOverlayLayer(),
+          if (ref.watch(overlayEnabledProvider)) const PlaceOverlayLayer(),
           Positioned(
             top: MediaQuery.of(context).padding.top + 12,
             left: 12,
@@ -665,6 +734,28 @@ class _MapPageState extends ConsumerState<MapPage> {
               settings: const LiquidGlassSettings(
                 blur: 1,
               ),
+            ),
+          ),
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 12,
+            right: 12,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                foregroundColor: Colors.black87,
+                shadowColor: Colors.transparent,
+                elevation: 2,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () {
+                ref.read(overlayEnabledProvider.notifier).state = !overlayEnabled;
+              },
+              icon: Icon(overlayEnabled ? Icons.layers : Icons.layers_clear),
+              label: Text(overlayEnabled ? '覆盖层: 开' : '覆盖层: 关'),
+            ).glassy(
+              borderRadius: 12,
+              settings: const LiquidGlassSettings(blur: 1),
             ),
           ),
           TimelinePanel(controller: _sheetController),
