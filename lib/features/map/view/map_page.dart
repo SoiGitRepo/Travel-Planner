@@ -8,6 +8,7 @@ import 'package:travel_planner/core/widgets/glassy/glassy.dart';
 import 'package:google_api_availability/google_api_availability.dart';
 // import 'package:go_router/go_router.dart';
 
+import 'dart:ui' as ui;
 import '../../../core/models/latlng_point.dart' as model;
 import '../../../core/providers.dart';
 import '../../../core/utils/haversine.dart';
@@ -172,7 +173,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     ref.read(overlayRefreshStateProvider.notifier).state = OverlayRefreshState(center: center, zoom: z, at: now);
   }
 
-  // 将候选 places 计算为像素坐标并进行网格化碰撞裁剪
+  // 将候选 places 计算为像素坐标并进行矩形碰撞裁剪
   Future<void> _layoutOverlayItems(BuildContext context) async {
     final c = ref.read(mapControllerProvider);
     if (c == null) return;
@@ -187,7 +188,6 @@ class _MapPageState extends ConsumerState<MapPage> {
     final usableHeight = size.height * (1 - fraction) - 8; // 底部上方留白
     final statusBar = MediaQuery.of(context).padding.top;
     final leftPad = 0.0, rightPad = 0.0, topPad = statusBar + 8.0;
-    final cellW = 96.0, cellH = 48.0;
 
     // maxCount 与 _refreshOverlayPlaces 中一致
     final z = ref.read(cameraPositionProvider)?.zoom ?? 14.0;
@@ -204,7 +204,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       maxCount = 80;
     }
 
-    final slots = <String>{};
+    final rects = <ui.Rect>[];
     final results = <OverlayRenderItem>[];
     for (final p in list) {
       if (selected?.placeId != null && p.id == selected!.placeId) {
@@ -216,11 +216,34 @@ class _MapPageState extends ConsumerState<MapPage> {
         final y = sc.y.toDouble();
         if (x < leftPad || x > size.width - rightPad) continue;
         if (y < topPad || y > usableHeight) continue;
-        final gx = (x / cellW).floor();
-        final gy = (y / cellH).floor();
-        final key = '$gx:$gy';
-        if (slots.contains(key)) continue; // 已占用
-        slots.add(key);
+
+        // 动态测量文本宽高（两行内）
+        final textSpan = TextSpan(text: p.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500));
+        final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr, maxLines: 2, ellipsis: '…');
+        tp.layout(maxWidth: 160);
+        final labelW = tp.width;
+        final labelH = tp.height;
+        const hPad = 10.0; // 文字左右内边距
+        const vPad = 4.0;  // 文字上下内边距
+        const gap = 4.0;   // 文字与图标间距
+        const iconSize = 20.0;
+
+        final boxW = labelW + hPad * 2;
+        final boxH = labelH + vPad * 2 + gap + iconSize;
+        final left = (x - boxW / 2).clamp(leftPad, size.width - rightPad - boxW);
+        final top = (y - (iconSize + gap + vPad * 2 + labelH)).clamp(topPad, usableHeight - boxH);
+        final rect = ui.Rect.fromLTWH(left, top, boxW, boxH);
+
+        // 碰撞检测：与已有矩形相交则跳过
+        bool collide = false;
+        for (final r in rects) {
+          if (r.overlaps(rect)) {
+            collide = true;
+            break;
+          }
+        }
+        if (collide) continue;
+        rects.add(rect);
         results.add(OverlayRenderItem(place: p, pos: OverlayPos(x, y)));
         if (results.length >= maxCount) break;
       } catch (_) {

@@ -71,7 +71,7 @@ class _PlaceOverlayLayerState extends ConsumerState<PlaceOverlayLayer>
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(6),
                         boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 2)),
+                          BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8, offset: const Offset(0, 2)),
                         ],
                       ),
                       child: Text(
@@ -93,7 +93,7 @@ class _PlaceOverlayLayerState extends ConsumerState<PlaceOverlayLayer>
                         color: Colors.orangeAccent,
                         shape: BoxShape.circle,
                         boxShadow: [
-                          BoxShadow(color: Colors.orange.withOpacity(0.4), blurRadius: 12),
+                          BoxShadow(color: Colors.orange.withValues(alpha: 0.4), blurRadius: 12),
                         ],
                       ),
                       child: const Icon(Icons.place, color: Colors.white, size: 20),
