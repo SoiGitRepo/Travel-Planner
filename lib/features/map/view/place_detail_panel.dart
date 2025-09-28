@@ -85,14 +85,30 @@ class PlaceDetailPanel extends ConsumerWidget {
                               mode: ref.read(transportModeProvider),
                             );
                         final controller = ref.read(mapControllerProvider);
-                        final planAsync = ref.read(planControllerProvider);
-                        if (controller != null && planAsync.hasValue) {
-                          await FitUtils.fitPlan(
-                            controller: controller,
-                            plan: planAsync.value!.currentPlan,
-                            sheetFraction: ref.read(sheetFractionProvider),
-                            animate: true,
-                          );
+                        final currentPage = ref.read(panelPageProvider);
+                        if (controller != null) {
+                          if (currentPage == PanelPage.timeline) {
+                            // 仅时间轴页才适配整计划
+                            final planAsync = ref.read(planControllerProvider);
+                            if (planAsync.hasValue) {
+                              await FitUtils.fitPlan(
+                                controller: controller,
+                                plan: planAsync.value!.currentPlan,
+                                sheetFraction: ref.read(sheetFractionProvider),
+                                animate: true,
+                              );
+                            }
+                          } else {
+                            // 详情页：仅聚焦该地点
+                            await controller.animateCamera(
+                              CameraUpdate.newCameraPosition(
+                                CameraPosition(
+                                  target: LatLng(selected.point.lat, selected.point.lng),
+                                  zoom: 16,
+                                ),
+                              ),
+                            );
+                          }
                         }
                         // 高亮新加入的节点（通常是最后一个）
                         final plan = ref.read(planControllerProvider).valueOrNull?.currentPlan;

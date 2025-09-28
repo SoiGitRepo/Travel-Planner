@@ -9,9 +9,11 @@ import 'package:google_api_availability/google_api_availability.dart';
 // import 'package:go_router/go_router.dart';
 
 import '../../../core/models/latlng_point.dart' as model;
+import '../../../core/providers.dart';
 import '../../plan/presentation/plan_controller.dart';
 import 'providers.dart';
 import 'timeline_panel.dart';
+import 'place_overlay_layer.dart';
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
@@ -52,7 +54,10 @@ class _MapPageState extends ConsumerState<MapPage> {
         final nearSnap = snaps.any((s) => (size - s).abs() < 0.02);
         final shouldAnimate =
             nearSnap || delta > 0.08 || since.inMilliseconds > 320;
-        _fitToNodes(context, animate: shouldAnimate);
+        // 仅在时间轴页面自动适配整计划
+        if (ref.read(panelPageProvider) == PanelPage.timeline) {
+          _fitToNodes(context, animate: shouldAnimate);
+        }
         if (shouldAnimate) {
           _lastAnimateAt = now;
         }
@@ -178,10 +183,12 @@ class _MapPageState extends ConsumerState<MapPage> {
   Future<void> _onLongPress(LatLng point) async {
     final mode = ref.read(transportModeProvider);
     await ref.read(planControllerProvider.notifier).addNodeAt(
-          model.LatLngPoint(point.latitude, point.longitude),
-          mode: mode,
-        );
-    unawaited(_fitToNodes(context));
+        model.LatLngPoint(point.latitude, point.longitude),
+        mode: mode);
+    // 仅时间轴页自动适配整计划
+    if (ref.read(panelPageProvider) == PanelPage.timeline) {
+      unawaited(_fitToNodes(context));
+    }
   }
 
   @override
@@ -217,6 +224,13 @@ class _MapPageState extends ConsumerState<MapPage> {
             // 立即相机聚焦并放大，高亮并显示信息窗
             final c = ref.read(mapControllerProvider);
             if (c != null) {
+              // 更新覆盖层像素坐标
+              () async {
+                try {
+                  final sc = await c.getScreenCoordinate(LatLng(n.point.lat, n.point.lng));
+                  ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
+                } catch (_) {}
+              }();
               unawaited(c.animateCamera(
                 CameraUpdate.newCameraPosition(
                   CameraPosition(target: LatLng(n.point.lat, n.point.lng), zoom: 16),
@@ -262,6 +276,13 @@ class _MapPageState extends ConsumerState<MapPage> {
           // 立即相机聚焦并放大，显示信息窗
           final c = ref.read(mapControllerProvider);
           if (c != null) {
+            // 更新覆盖层像素坐标
+            () async {
+              try {
+                final sc = await c.getScreenCoordinate(LatLng(p.location.lat, p.location.lng));
+                ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
+              } catch (_) {}
+            }();
             unawaited(c.animateCamera(
               CameraUpdate.newCameraPosition(
                 CameraPosition(target: LatLng(p.location.lat, p.location.lng), zoom: 16),
@@ -317,6 +338,17 @@ class _MapPageState extends ConsumerState<MapPage> {
                 } catch (_) {}
               });
             },
+            onCameraMove: (pos) async {
+              ref.read(cameraPositionProvider.notifier).state = pos;
+              final sel = ref.read(selectedPlaceProvider);
+              final c = ref.read(mapControllerProvider);
+              if (sel != null && c != null) {
+                try {
+                  final sc = await c.getScreenCoordinate(LatLng(sel.point.lat, sel.point.lng));
+                  ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
+                } catch (_) {}
+              }
+            },
             onCameraIdle: () async {
               final controller = ref.read(mapControllerProvider);
               if (controller != null) {
@@ -325,21 +357,62 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ref.read(visibleRegionProvider.notifier).state = bounds;
                 } catch (_) {}
               }
-            },
-            onTap: (latLng) {
-              ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
-                title: '所选位置',
-                point: model.LatLngPoint(latLng.latitude, latLng.longitude),
-              );
-              ref.read(panelPageProvider.notifier).state = PanelPage.detail;
-              // 立即相机聚焦并放大
+              // 相机空闲后再校准一次覆盖层位置
+              final sel = ref.read(selectedPlaceProvider);
               final c = ref.read(mapControllerProvider);
-              if (c != null) {
-                unawaited(c.animateCamera(
-                  CameraUpdate.newCameraPosition(
-                    CameraPosition(target: latLng, zoom: 16),
-                  ),
-                ));
+              if (sel != null && c != null) {
+                try {
+                  final sc = await c.getScreenCoordinate(LatLng(sel.point.lat, sel.point.lng));
+                  ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
+                } catch (_) {}
+              }
+            },
+            onTap: (latLng) async {
+              // 地图点击：附近检索 place（优先），无结果则回退经纬度
+              final ps = ref.read(placesServiceProvider);
+              final nearby = await ps.searchNearby(
+                model.LatLngPoint(latLng.latitude, latLng.longitude),
+                radiusMeters: 120,
+              );
+              if (nearby.isNotEmpty) {
+                final p = nearby.first;
+                ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
+                  placeId: p.id,
+                  title: p.name,
+                  point: p.location,
+                );
+                ref.read(panelPageProvider.notifier).state = PanelPage.detail;
+                final c = ref.read(mapControllerProvider);
+                if (c != null) {
+                  unawaited(c.animateCamera(
+                    CameraUpdate.newCameraPosition(
+                      CameraPosition(target: LatLng(p.location.lat, p.location.lng), zoom: 16),
+                    ),
+                  ));
+                }
+              } else {
+                ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
+                  title: '所选位置',
+                  point: model.LatLngPoint(latLng.latitude, latLng.longitude),
+                );
+                ref.read(panelPageProvider.notifier).state = PanelPage.detail;
+                final c = ref.read(mapControllerProvider);
+                if (c != null) {
+                  unawaited(c.animateCamera(
+                    CameraUpdate.newCameraPosition(
+                      CameraPosition(target: latLng, zoom: 16),
+                    ),
+                  ));
+                }
+              }
+              // 计算覆盖层像素位置
+              final c2 = ref.read(mapControllerProvider);
+              final sel = ref.read(selectedPlaceProvider);
+              if (c2 != null && sel != null) {
+                try {
+                  final sc = await c2.getScreenCoordinate(LatLng(sel.point.lat, sel.point.lng));
+                  ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
+                } catch (_) {}
               }
             },
             onLongPress: _onLongPress,
@@ -348,6 +421,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       body: Stack(
         children: [
           mapWidget,
+          const PlaceOverlayLayer(),
           Positioned(
             top: MediaQuery.of(context).padding.top + 12,
             left: 12,

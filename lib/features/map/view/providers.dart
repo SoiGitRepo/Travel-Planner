@@ -18,6 +18,15 @@ final panelPageProvider = StateProvider<PanelPage>((ref) => PanelPage.timeline);
 
 // 当前地图可见区域（用于限定搜索范围）
 final visibleRegionProvider = StateProvider<LatLngBounds?>((ref) => null);
+// 当前相机位置（用于覆盖层定位与密度控制）
+final cameraPositionProvider = StateProvider<CameraPosition?>((ref) => null);
+// 选中 Place 的屏幕像素位置（用于覆盖层定位）
+class OverlayPos {
+  final double x;
+  final double y;
+  const OverlayPos(this.x, this.y);
+}
+final selectedOverlayPosProvider = StateProvider<OverlayPos?>((ref) => null);
 
 class SelectedPlace {
   final String? nodeId; // 若为已在计划中的节点则有值
