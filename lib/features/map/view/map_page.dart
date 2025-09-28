@@ -6,7 +6,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:travel_planner/core/widgets/glassy/glassy.dart';
 import 'package:google_api_availability/google_api_availability.dart';
-import 'package:go_router/go_router.dart';
+// import 'package:go_router/go_router.dart';
 
 import '../../../core/models/latlng_point.dart' as model;
 import '../../plan/presentation/plan_controller.dart';
@@ -188,6 +188,8 @@ class _MapPageState extends ConsumerState<MapPage> {
   Widget build(BuildContext context) {
     final planAsync = ref.watch(planControllerProvider);
     final useAmap = ref.watch(useAmapProvider);
+    final searchResults = ref.watch(searchResultsProvider);
+    final selected = ref.watch(selectedPlaceProvider);
 
     final markers = <Marker>{};
     final polylines = <Polyline>{};
@@ -200,14 +202,31 @@ class _MapPageState extends ConsumerState<MapPage> {
           markerId: MarkerId(n.id),
           position: LatLng(n.point.lat, n.point.lng),
           infoWindow: InfoWindow(title: n.title),
-          icon:
-              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            (selected?.nodeId == n.id)
+                ? BitmapDescriptor.hueRed
+                : BitmapDescriptor.hueAzure,
+          ),
           onTap: () {
             ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
               nodeId: n.id,
               title: n.title,
               point: n.point,
             );
+            ref.read(panelPageProvider.notifier).state = PanelPage.detail;
+            // 立即相机聚焦并放大，高亮并显示信息窗
+            final c = ref.read(mapControllerProvider);
+            if (c != null) {
+              unawaited(c.animateCamera(
+                CameraUpdate.newCameraPosition(
+                  CameraPosition(target: LatLng(n.point.lat, n.point.lng), zoom: 16),
+                ),
+              ));
+              // 尝试显示信息窗
+              unawaited(Future.delayed(const Duration(milliseconds: 50), () {
+                c.showMarkerInfoWindow(MarkerId(n.id));
+              }));
+            }
           },
         ));
       }
@@ -223,6 +242,38 @@ class _MapPageState extends ConsumerState<MapPage> {
         }
       }
     });
+
+    // 搜索结果标记
+    for (final p in searchResults) {
+      markers.add(Marker(
+        markerId: MarkerId('search_${p.id}'),
+        position: LatLng(p.location.lat, p.location.lng),
+        infoWindow: InfoWindow(title: p.name),
+        icon: BitmapDescriptor.defaultMarkerWithHue(
+          (selected?.placeId == p.id) ? BitmapDescriptor.hueGreen : BitmapDescriptor.hueRose,
+        ),
+        onTap: () {
+          ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
+            placeId: p.id,
+            title: p.name,
+            point: model.LatLngPoint(p.location.lat, p.location.lng),
+          );
+          ref.read(panelPageProvider.notifier).state = PanelPage.detail;
+          // 立即相机聚焦并放大，显示信息窗
+          final c = ref.read(mapControllerProvider);
+          if (c != null) {
+            unawaited(c.animateCamera(
+              CameraUpdate.newCameraPosition(
+                CameraPosition(target: LatLng(p.location.lat, p.location.lng), zoom: 16),
+              ),
+            ));
+            unawaited(Future.delayed(const Duration(milliseconds: 50), () {
+              c.showMarkerInfoWindow(MarkerId('search_${p.id}'));
+            }));
+          }
+        },
+      ));
+    }
 
     final mapWidget = useAmap
         ? Container(
@@ -256,12 +307,40 @@ class _MapPageState extends ConsumerState<MapPage> {
             polylines: polylines,
             onMapCreated: (controller) {
               ref.read(mapControllerProvider.notifier).state = controller;
+              // 初始化可见区域
+              Future.delayed(const Duration(milliseconds: 50), () async {
+                try {
+                  final bounds = await controller.getVisibleRegion();
+                  if (mounted) {
+                    ref.read(visibleRegionProvider.notifier).state = bounds;
+                  }
+                } catch (_) {}
+              });
+            },
+            onCameraIdle: () async {
+              final controller = ref.read(mapControllerProvider);
+              if (controller != null) {
+                try {
+                  final bounds = await controller.getVisibleRegion();
+                  ref.read(visibleRegionProvider.notifier).state = bounds;
+                } catch (_) {}
+              }
             },
             onTap: (latLng) {
               ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
                 title: '所选位置',
                 point: model.LatLngPoint(latLng.latitude, latLng.longitude),
               );
+              ref.read(panelPageProvider.notifier).state = PanelPage.detail;
+              // 立即相机聚焦并放大
+              final c = ref.read(mapControllerProvider);
+              if (c != null) {
+                unawaited(c.animateCamera(
+                  CameraUpdate.newCameraPosition(
+                    CameraPosition(target: latLng, zoom: 16),
+                  ),
+                ));
+              }
             },
             onLongPress: _onLongPress,
           );
@@ -289,28 +368,6 @@ class _MapPageState extends ConsumerState<MapPage> {
             ).glassy(
               borderRadius: 12,
               // glassContainsChild: true,
-              settings: const LiquidGlassSettings(
-                blur: 1,
-              ),
-            ),
-          ),
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 12,
-            right: 12,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                foregroundColor: Colors.black87,
-                shadowColor: Colors.transparent,
-                elevation: 2,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: () => context.push('/search'),
-              icon: const Icon(Icons.search),
-              label: const Text('搜索'),
-            ).glassy(
-              borderRadius: 12,
               settings: const LiquidGlassSettings(
                 blur: 1,
               ),
