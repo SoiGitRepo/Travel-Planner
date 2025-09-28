@@ -86,7 +86,7 @@ extension GlassyX on Widget {
           )
         : this;
     return LiquidGlass(
-      shape: LiquidOval(),
+      shape: const LiquidOval(),
       glassContainsChild: glassContainsChild,
       settings: settings ?? const LiquidGlassSettings(),
       child: ClipOval(

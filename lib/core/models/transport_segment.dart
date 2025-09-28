@@ -95,11 +95,13 @@ class TransportSegmentAdapter extends TypeAdapter<TransportSegment> {
       ..writeString(obj.toNodeId)
       ..write(obj.mode)
       ..writeBool(obj.userDurationMinutes != null);
-    if (obj.userDurationMinutes != null)
+    if (obj.userDurationMinutes != null) {
       writer.writeInt(obj.userDurationMinutes!);
+    }
     writer.writeBool(obj.estimatedDurationMinutes != null);
-    if (obj.estimatedDurationMinutes != null)
+    if (obj.estimatedDurationMinutes != null) {
       writer.writeInt(obj.estimatedDurationMinutes!);
+    }
     writer.writeBool(obj.distanceMeters != null);
     if (obj.distanceMeters != null) writer.writeDouble(obj.distanceMeters!);
     if (obj.path != null) {
