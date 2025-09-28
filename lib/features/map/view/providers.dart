@@ -4,6 +4,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../core/models/latlng_point.dart' as model;
 import '../../../core/models/transport_mode.dart';
 import '../../../core/services/places_service.dart' show PlaceItem;
+import '../../../core/services/places_service.dart' as places;
+import '../../../core/providers.dart';
 
 final mapControllerProvider = StateProvider<GoogleMapController?>((ref) => null);
 final transportModeProvider = StateProvider<TransportMode>((ref) => TransportMode.walking);
@@ -39,6 +41,11 @@ class OverlayRenderItem {
 }
 final overlayRenderItemsProvider = StateProvider<List<OverlayRenderItem>>((ref) => const []);
 
+// 地图当前相机 target 的屏幕像素坐标（用于计算位移）
+final centerScreenPosProvider = StateProvider<OverlayPos?>((ref) => null);
+// 覆盖层整体位移（相机移动时按像素平移，idle 时重置为 0）
+final overlayShiftProvider = StateProvider<OverlayPos>((ref) => const OverlayPos(0, 0));
+
 // 刷新节流状态（用于判断是否需要重新获取 Nearby）
 class OverlayRefreshState {
   final LatLng center;
@@ -55,6 +62,16 @@ class OverlayCacheEntry {
   const OverlayCacheEntry(this.items, this.at);
 }
 final overlayCacheProvider = StateProvider<Map<String, OverlayCacheEntry>>((ref) => <String, OverlayCacheEntry>{});
+
+// Place 详情（评分/评论/照片等）
+final placeDetailsProvider = FutureProvider.family<places.PlaceDetails?, String>((ref, placeId) async {
+  final svc = ref.read(placesServiceProvider);
+  try {
+    return await svc.fetchPlaceDetails(placeId);
+  } catch (_) {
+    return null;
+  }
+});
 
 class SelectedPlace {
   final String? nodeId; // 若为已在计划中的节点则有值
