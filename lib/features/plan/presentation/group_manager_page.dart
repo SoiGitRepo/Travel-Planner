@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/models/plan_group.dart';
 import '../../../core/providers.dart';
 import 'plan_controller.dart';
 

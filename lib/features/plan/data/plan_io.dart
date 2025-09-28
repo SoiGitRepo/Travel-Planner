@@ -103,17 +103,27 @@ class PlanIO {
 
   Node _nodeFromMap(Map<String, dynamic> m) {
     final schedMs = (m['scheduledTime'] as num?)?.toInt();
+    // 兼容 point 缺失或类型异常（如为 String、List 等），并稳健解析 lat/lng
+    double _toDouble(dynamic v) {
+      if (v == null) return 0;
+      if (v is num) return v.toDouble();
+      if (v is String) {
+        final dv = double.tryParse(v);
+        return dv ?? 0;
+      }
+      return 0;
+    }
+    final pointAny = m['point'];
+    double lat = 0;
+    double lng = 0;
+    if (pointAny is Map) {
+      lat = _toDouble(pointAny['lat']);
+      lng = _toDouble(pointAny['lng']);
+    }
     return Node(
       id: (m['id'] as String?) ?? DateTime.now().microsecondsSinceEpoch.toString(),
       title: (m['title'] as String?) ?? '未命名',
-      point: LatLngPoint(
-        (m['point'] as Map)['lat'] as num? != null
-            ? ((m['point'] as Map)['lat'] as num).toDouble()
-            : 0,
-        (m['point'] as Map)['lng'] as num? != null
-            ? ((m['point'] as Map)['lng'] as num).toDouble()
-            : 0,
-      ),
+      point: LatLngPoint(lat, lng),
       scheduledTime: schedMs != null ? DateTime.fromMillisecondsSinceEpoch(schedMs) : null,
       stayDurationMinutes: (m['stay'] as num?)?.toInt(),
     );
@@ -128,8 +138,7 @@ class PlanIO {
     };
     final pathList = (m['path'] as List?)
             ?.map((e) => LatLngPoint(((e as Map)['lat'] as num).toDouble(), ((e)['lng'] as num).toDouble()))
-            .toList() ??
-        null;
+            .toList();
     return TransportSegment(
       id: (m['id'] as String?) ?? DateTime.now().microsecondsSinceEpoch.toString(),
       fromNodeId: (m['from'] as String?) ?? '',
