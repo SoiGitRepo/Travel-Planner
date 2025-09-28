@@ -228,9 +228,9 @@ class _MapPageState extends ConsumerState<MapPage> {
         ? Container(
             color: Colors.black,
             alignment: Alignment.center,
-            child: Column(
+            child: const Column(
               mainAxisSize: MainAxisSize.min,
-              children: const [
+              children: [
                 Icon(Icons.map, color: Colors.white70, size: 48),
                 SizedBox(height: 12),
                 Text(

@@ -104,7 +104,7 @@ class TimelinePanel extends ConsumerWidget {
                           leading: const Icon(Icons.assessment),
                           title: const Text('总览'),
                           subtitle: Text(
-                            '交通 ${travelMinutes} 分钟 · 距离 ${(distanceMeters / 1000).toStringAsFixed(1)} km · 停留 ${stayMinutes} 分钟',
+                            '交通 $travelMinutes 分钟 · 距离 ${(distanceMeters / 1000).toStringAsFixed(1)} km · 停留 $stayMinutes 分钟',
                           ),
                           trailing: Wrap(
                             spacing: 8,
@@ -136,7 +136,7 @@ class TimelinePanel extends ConsumerWidget {
                                 onPressed: () async {
                                   final group = planAsync.valueOrNull?.group;
                                   if (group == null) return;
-                                  final io = const PlanIO();
+                                  const io = PlanIO();
                                   final path = await io.saveExportToFile(group);
                                   final messenger = ScaffoldMessenger.maybeOf(context);
                                   if (messenger != null) {
@@ -177,7 +177,7 @@ class TimelinePanel extends ConsumerWidget {
                                   );
                                   if (jsonStr == null || jsonStr.trim().isEmpty) return;
                                   try {
-                                    final io = const PlanIO();
+                                    const io = PlanIO();
                                     final group = await io.importFromJson(jsonStr);
                                     await ref.read(planControllerProvider.notifier).replaceGroup(group);
                                     final messenger = ScaffoldMessenger.maybeOf(context);
@@ -430,7 +430,7 @@ class TimelinePanel extends ConsumerWidget {
                               ? ' · 距离 ${(segNN.distanceMeters! / 1000).toStringAsFixed(1)} km'
                               : '';
                           final subtitle = user != null
-                              ? '我的时长 ${user} 分钟${est != null ? '（预估 ${est} 分钟）' : ''}$distStr'
+                              ? '我的时长 $user 分钟${est != null ? '（预估 $est 分钟）' : ''}$distStr'
                               : (est != null ? '预估 $est 分钟$distStr' : '无预估，直线连接$distStr');
                           return ListTile(
                             dense: true,
