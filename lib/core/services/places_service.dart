@@ -49,4 +49,33 @@ class PlacesService {
       return PlaceItem(id: id, name: name, address: addr, location: LatLngPoint(lat, lng));
     }).toList(growable: false);
   }
+
+  /// 按位置附近检索 Place（Nearby Search）
+  Future<List<PlaceItem>> searchNearby(LatLngPoint center, {int radiusMeters = 300, String? keyword}) async {
+    if (_apiKey == null || _apiKey!.isEmpty) return const [];
+    final params = <String, String>{
+      'key': _apiKey!,
+      'location': '${center.lat},${center.lng}',
+      'radius': radiusMeters.toString(),
+      'language': 'zh-CN',
+    };
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      params['keyword'] = keyword.trim();
+    }
+    final uri = Uri.https('maps.googleapis.com', '/maps/api/place/nearbysearch/json', params);
+    final resp = await http.get(uri);
+    if (resp.statusCode != 200) return const [];
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    final results = (data['results'] as List?) ?? const [];
+    return results.map((e) {
+      final m = e as Map<String, dynamic>;
+      final id = (m['place_id'] as String?) ?? '';
+      final name = (m['name'] as String?) ?? '未命名';
+      final addr = m['vicinity'] as String?;
+      final geo = (m['geometry'] as Map<String, dynamic>?)?['location'] as Map<String, dynamic>?;
+      final lat = (geo?['lat'] as num?)?.toDouble() ?? 0;
+      final lng = (geo?['lng'] as num?)?.toDouble() ?? 0;
+      return PlaceItem(id: id, name: name, address: addr, location: LatLngPoint(lat, lng));
+    }).toList(growable: false);
+  }
 }
