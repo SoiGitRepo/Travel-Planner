@@ -43,15 +43,18 @@ void main() {
   test('PlacesRepositoryImpl prefers remote data source when enabled', () async {
     final repo = PlacesRepositoryImpl(const PlacesService(), remote: _FakeRemote());
 
-    final list = await repo.searchText('anything');
+    final listEither = await repo.searchText('anything').run();
+    final list = listEither.getOrElse((_) => <PlaceItem>[]);
     expect(list, isNotEmpty);
     expect(list.first.id, 'remote_1');
 
-    final nearby = await repo.searchNearby(const LatLngPoint(0, 0));
+    final nearbyEither = await repo.searchNearby(const LatLngPoint(0, 0)).run();
+    final nearby = nearbyEither.getOrElse((_) => <PlaceItem>[]);
     expect(nearby, isNotEmpty);
     expect(nearby.first.id, 'nearby_1');
 
-    final details = await repo.fetchPlaceDetails('xxx');
+    final detailsEither = await repo.fetchPlaceDetails('xxx').run();
+    final details = detailsEither.getOrElse((_) => null);
     expect(details, isNotNull);
     expect(details!.name, 'name');
   });
