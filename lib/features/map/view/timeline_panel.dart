@@ -381,30 +381,35 @@ class TimelinePanel extends ConsumerWidget {
                                   ));
                                   final c = ref.read(mapControllerProvider);
                                   if (c != null) {
-                                    final bounds = ref.read(visibleRegionProvider);
+                                    // 面板感知：根据底部面板占比与当前可见区域跨度，计算上移偏移
                                     final fraction = ref
                                         .read(sheetFractionProvider)
                                         .clamp(0.0, 0.95);
-                                    final raw = LatLng(n.point.lat, n.point.lng);
-                                    CameraPosition pos;
+                                    final bounds =
+                                        ref.read(visibleRegionProvider);
+                                    double latSpan;
                                     if (bounds != null) {
-                                      final minLat = bounds.southwest.latitude;
-                                      final maxLat = bounds.northeast.latitude;
-                                      final spanLat = (maxLat - minLat).abs();
-                                      if (spanLat > 1e-7) {
-                                        final centerLat =
-                                            raw.latitude + spanLat * (fraction / 2.0);
-                                        pos = CameraPosition(
-                                            target: LatLng(centerLat, raw.longitude),
-                                            zoom: 16);
-                                      } else {
-                                        pos = CameraPosition(target: raw, zoom: 16);
-                                      }
+                                      latSpan = (bounds.northeast.latitude -
+                                              bounds.southwest.latitude)
+                                          .abs();
+                                      latSpan = latSpan < 1e-5 ? 1e-3 : latSpan;
                                     } else {
-                                      pos = CameraPosition(target: raw, zoom: 16);
+                                      latSpan = 0.05; // 兜底跨度
                                     }
+                                    final visibleRatio =
+                                        (0.85 - fraction).clamp(0.2, 0.9);
+                                    final targetSpan =
+                                        latSpan * (1.0 / visibleRatio);
+                                    final shiftLat =
+                                        targetSpan * (fraction * 0.9);
+                                    final center = LatLng(
+                                        n.point.lat - shiftLat, n.point.lng);
+
                                     await c.animateCamera(
-                                      CameraUpdate.newCameraPosition(pos),
+                                      CameraUpdate.newCameraPosition(
+                                        CameraPosition(
+                                            target: center, zoom: 16),
+                                      ),
                                     );
                                     await Future.delayed(
                                         const Duration(milliseconds: 50));
