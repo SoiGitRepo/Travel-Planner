@@ -15,6 +15,13 @@ import 'providers.dart';
 import 'panel_search.dart';
 import 'place_detail_panel.dart';
 
+enum _OverviewMenuAction {
+  addPlan,
+  groupManage,
+  exportJson,
+  importJson,
+}
+
 class TimelinePanel extends ConsumerWidget {
   final DraggableScrollableController controller;
   const TimelinePanel({super.key, required this.controller});
@@ -175,11 +182,12 @@ class TimelinePanel extends ConsumerWidget {
                             subtitle: Text(
                               '交通 $travelMinutes 分钟 · 距离 ${(distanceMeters / 1000).toStringAsFixed(1)} km · 停留 $stayMinutes 分钟',
                             ),
-                            trailing: Wrap(
-                              spacing: 8,
-                              children: [
-                                TextButton.icon(
-                                  onPressed: () async {
+                            trailing: PopupMenuButton<_OverviewMenuAction>(
+                              tooltip: '更多',
+                              icon: const Icon(Icons.more_vert),
+                              onSelected: (action) async {
+                                switch (action) {
+                                  case _OverviewMenuAction.addPlan:
                                     final now = DateTime.now();
                                     final picked = await showDatePicker(
                                       context: context,
@@ -190,35 +198,19 @@ class TimelinePanel extends ConsumerWidget {
                                     if (picked != null) {
                                       await ref.read(planControllerProvider.notifier).createPlanForDate(picked);
                                     }
-                                  },
-                                  icon: const Icon(Icons.add),
-                                  label: const Text('添加日期计划'),
-                                ),
-                                TextButton.icon(
-                                  onPressed: () {
+                                    break;
+                                  case _OverviewMenuAction.groupManage:
                                     context.push('/groups');
-                                  },
-                                  icon: const Icon(Icons.group),
-                                  label: const Text('分组管理'),
-                                ),
-                                TextButton.icon(
-                                  onPressed: () async {
+                                    break;
+                                  case _OverviewMenuAction.exportJson:
                                     final group = planAsync.valueOrNull?.group;
                                     if (group == null) return;
                                     const io = PlanIO();
                                     final path = await io.saveExportToFile(group);
                                     final messenger = ScaffoldMessenger.maybeOf(context);
-                                    if (messenger != null) {
-                                      messenger.showSnackBar(
-                                        SnackBar(content: Text('已导出至文件：$path')),
-                                      );
-                                    }
-                                  },
-                                  icon: const Icon(Icons.download),
-                                  label: const Text('导出JSON'),
-                                ),
-                                TextButton.icon(
-                                  onPressed: () async {
+                                    messenger?.showSnackBar(SnackBar(content: Text('已导出至文件：$path')));
+                                    break;
+                                  case _OverviewMenuAction.importJson:
                                     final controller = TextEditingController();
                                     final jsonStr = await showDialog<String?>(
                                       context: context,
@@ -233,14 +225,8 @@ class TimelinePanel extends ConsumerWidget {
                                           ),
                                         ),
                                         actions: [
-                                          TextButton(
-                                            onPressed: () => Navigator.pop(ctx, null),
-                                            child: const Text('取消'),
-                                          ),
-                                          TextButton(
-                                            onPressed: () => Navigator.pop(ctx, controller.text),
-                                            child: const Text('确定'),
-                                          ),
+                                          TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('取消')),
+                                          TextButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('确定')),
                                         ],
                                       ),
                                     );
@@ -250,24 +236,31 @@ class TimelinePanel extends ConsumerWidget {
                                       final group = await io.importFromJson(jsonStr);
                                       await ref.read(planControllerProvider.notifier).replaceGroup(group);
                                       final messenger = ScaffoldMessenger.maybeOf(context);
-                                      if (messenger != null) {
-                                        messenger.showSnackBar(
-                                          const SnackBar(content: Text('导入成功')),
-                                        );
-                                      }
+                                      messenger?.showSnackBar(const SnackBar(content: Text('导入成功')));
                                     } catch (e) {
                                       final messenger = ScaffoldMessenger.maybeOf(context);
-                                      if (messenger != null) {
-                                        messenger.showSnackBar(
-                                          SnackBar(content: Text('导入失败：$e')),
-                                        );
-                                      }
+                                      messenger?.showSnackBar(SnackBar(content: Text('导入失败：$e')));
                                     }
-                                  },
-                                  icon: const Icon(Icons.upload),
-                                  label: const Text('导入JSON'),
-                                ),
+                                    break;
+                                }
+                              },
+                              itemBuilder: (ctx) => const [
+                                PopupMenuItem(value: _OverviewMenuAction.addPlan, child: Text('添加日期计划')),
+                                PopupMenuItem(value: _OverviewMenuAction.groupManage, child: Text('分组管理')),
+                                PopupMenuItem(value: _OverviewMenuAction.exportJson, child: Text('导出JSON')),
+                                PopupMenuItem(value: _OverviewMenuAction.importJson, child: Text('导入JSON')),
                               ],
+                            ).glassy(
+                              borderRadius: 12,
+                              settings: LiquidGlassSettings(
+                                blur: 2,
+                                thickness: 24,
+                                blend: 28,
+                                lightAngle: 0.2 * pi,
+                                lightIntensity: 0.6,
+                                saturation: 0.4,
+                                lightness: 0.5,
+                              ),
                             ),
                           ),
                         ),
@@ -275,17 +268,7 @@ class TimelinePanel extends ConsumerWidget {
                     ),
                   );
                   slivers.add(const SliverToBoxAdapter(child: Divider(height: 1)));
-                  // 选中地点信息面板（仅时间轴页展示旧卡片，详情页已替代）
-                  slivers.add(
-                    SliverToBoxAdapter(
-                      child: Builder(builder: (context) {
-                        if (page != PanelPage.timeline) return const SizedBox.shrink();
-                        final selected = ref.watch(selectedPlaceProvider);
-                        if (selected == null) return const SizedBox.shrink();
-                        return const PlaceDetailPanel();
-                      }),
-                    ),
-                  );
+                  // 不再在时间轴页展示“选中点详情卡片”（仅在详情页展示）
                   slivers.add(
                     SliverList(
                       delegate: SliverChildBuilderDelegate(
