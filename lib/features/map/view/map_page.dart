@@ -393,7 +393,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               point: n.point,
             );
             ref.read(panelPageProvider.notifier).state = PanelPage.detail;
-            // 面板移动至 60%
+            // 面板移动到 60% 中档位置
             unawaited(_sheetController.animateTo(
               0.6,
               duration: const Duration(milliseconds: 260),
@@ -431,42 +431,87 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     // 附近 Place（通过 Places API 获取）标记
     final nearbyPlaces = ref.watch(overlayPlacesProvider);
-    // 搜索结果标记
-    for (final p in searchResults) {
+    for (final p in nearbyPlaces) {
       final typeKey = _mainTypeKey(p.types);
       final custom = _typeIconCache[typeKey];
       if (custom == null) {
         unawaited(_ensureIconBuilt(typeKey));
       }
-      markers.add(
-        Marker(
-          markerId: MarkerId('search_${p.id}'),
-          position: LatLng(p.location.lat, p.location.lng),
-          infoWindow: InfoWindow(title: p.name),
-          icon: (selected?.placeId == p.id)
-              ? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen)
-              : (custom ??
-                BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
-          onTap: () {
-            ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
-              placeId: p.id,
-              title: p.name,
-              point: model.LatLngPoint(p.location.lat, p.location.lng),
-            );
-            ref.read(panelPageProvider.notifier).state = PanelPage.detail;
-            // 面板移动至 60%
-            unawaited(_sheetController.animateTo(
-              0.6,
-              duration: const Duration(milliseconds: 260),
-              curve: Curves.easeOutCubic,
+      markers.add(Marker(
+        markerId: MarkerId('nearby_${p.id}'),
+        position: LatLng(p.location.lat, p.location.lng),
+        infoWindow: InfoWindow(title: p.name),
+        icon: (custom ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
+        onTap: () {
+          ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
+            placeId: p.id,
+            title: p.name,
+            point: model.LatLngPoint(p.location.lat, p.location.lng),
+          );
+          ref.read(panelPageProvider.notifier).state = PanelPage.detail;
+          // 面板移动到 60% 中档位置
+          unawaited(_sheetController.animateTo(
+            0.6,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+          ));
+          final c = ref.read(mapControllerProvider);
+          if (c != null) {
+            unawaited(c.animateCamera(
+              CameraUpdate.newCameraPosition(
+                CameraPosition(
+                    target: LatLng(p.location.lat, p.location.lng), zoom: 16),
+              ),
             ));
-            // 立即相机聚焦并放大，显示信息窗
-            final c = ref.read(mapControllerProvider);
-            if (c != null) {
-              unawaited(c.animateCamera(
-                CameraUpdate.newCameraPosition(
-                  CameraPosition(
-                      target: LatLng(p.location.lat, p.location.lng), zoom: 16),
+            unawaited(Future.delayed(const Duration(milliseconds: 50), () {
+              c.showMarkerInfoWindow(MarkerId('nearby_${p.id}'));
+            }));
+          }
+        },
+      ));
+    }
+
+    // 搜索结果标记
+    for (final p in searchResults) {
+      final typeKey = _mainTypeKey(p.types);
+      final custom = _typeIconCache[typeKey];
+      // 异步准备图标（未完成前回退默认）
+      if (custom == null) {
+        // 不阻塞 UI，生成后刷新
+        unawaited(_ensureIconBuilt(typeKey));
+      }
+      markers.add(Marker(
+        markerId: MarkerId('search_${p.id}'),
+        position: LatLng(p.location.lat, p.location.lng),
+        infoWindow: InfoWindow(title: p.name),
+        icon: (selected?.placeId == p.id)
+            ? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen)
+            : (custom ??
+                BitmapDescriptor.defaultMarkerWithHue(
+                    BitmapDescriptor.hueRose)),
+        onTap: () {
+          ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
+            placeId: p.id,
+            title: p.name,
+            point: model.LatLngPoint(p.location.lat, p.location.lng),
+          );
+          ref.read(panelPageProvider.notifier).state = PanelPage.detail;
+          // 面板移动到 60% 中档位置
+          unawaited(_sheetController.animateTo(
+            0.6,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+          ));
+          // 立即相机聚焦并放大，显示信息窗
+          final c = ref.read(mapControllerProvider);
+          if (c != null) {
+            unawaited(c.animateCamera(
+              CameraUpdate.newCameraPosition(
+                CameraPosition(
+                    target: LatLng(p.location.lat, p.location.lng), zoom: 16),
+              ),
+            ));
             unawaited(Future.delayed(const Duration(milliseconds: 50), () {
               c.showMarkerInfoWindow(MarkerId('search_${p.id}'));
             }));
