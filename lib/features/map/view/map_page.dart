@@ -349,12 +349,6 @@ class _MapPageState extends ConsumerState<MapPage> {
             polylines: polylines,
             onMapCreated: (controller) {
               ref.read(mapControllerProvider.notifier).state = controller;
-              // 应用默认样式（不隐藏 POI）
-              () async {
-                try {
-                  await controller.setMapStyle(_mapStyleDefault);
-                } catch (_) {}
-              }();
               // 初始化可见区域
               Future.delayed(const Duration(milliseconds: 50), () async {
                 try {

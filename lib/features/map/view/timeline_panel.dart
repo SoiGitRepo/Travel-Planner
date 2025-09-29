@@ -284,7 +284,9 @@ class TimelinePanel extends ConsumerWidget {
                                       ),
                                     );
                                     if (jsonStr == null ||
-                                        jsonStr.trim().isEmpty) return;
+                                        jsonStr.trim().isEmpty) {
+                                      return;
+                                    }
                                     try {
                                       const io = PlanIO();
                                       final group =
@@ -292,11 +294,17 @@ class TimelinePanel extends ConsumerWidget {
                                       await ref
                                           .read(planControllerProvider.notifier)
                                           .replaceGroup(group);
+                                      if (!context.mounted) {
+                                        return;
+                                      }
                                       final messenger =
                                           ScaffoldMessenger.maybeOf(context);
                                       messenger?.showSnackBar(const SnackBar(
                                           content: Text('导入成功')));
                                     } catch (e) {
+                                      if (!context.mounted) {
+                                        return;
+                                      }
                                       final messenger =
                                           ScaffoldMessenger.maybeOf(context);
                                       messenger?.showSnackBar(
@@ -332,10 +340,13 @@ class TimelinePanel extends ConsumerWidget {
                     SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
-                          if (page != PanelPage.timeline)
+                          if (page != PanelPage.timeline) {
                             return const SizedBox.shrink();
+                          }
                           // 防御：当节点列表为空时，不应构建任何子项（理论上 childCount=0 已避免触发）
-                          if (nodes.isEmpty) return const SizedBox.shrink();
+                          if (nodes.isEmpty) {
+                            return const SizedBox.shrink();
+                          }
                           if (index.isEven) {
                             final i = index ~/ 2;
                             final n = nodes[i];
