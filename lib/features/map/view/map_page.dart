@@ -8,15 +8,12 @@ import 'package:travel_planner/core/widgets/glassy/glassy.dart';
 import 'package:google_api_availability/google_api_availability.dart';
 // import 'package:go_router/go_router.dart';
 
-import 'dart:ui' as ui;
 import '../../../core/models/latlng_point.dart' as model;
 import '../../../core/providers.dart';
 import '../../../core/utils/haversine.dart';
 import '../../plan/presentation/plan_controller.dart';
 import 'providers.dart';
 import 'timeline_panel.dart';
-import 'place_overlay_layer.dart';
-import 'place_dense_overlay_layer.dart';
 import 'marker_icons.dart';
 
 class MapPage extends ConsumerStatefulWidget {
@@ -32,14 +29,14 @@ class _MapPageState extends ConsumerState<MapPage> {
   // 去除拖动结束后的二次动画，改为在接近吸附档位时直接使用动画，避免“两段式”停顿
   DateTime? _lastAnimateAt; // 上一次使用 animate 的时间
   double _lastSheetSize = 0.2; // 记录上一次的面板比例
-  DateTime? _lastLayoutAt; // 上一次在相机移动中触发布局的时间
+  // 覆盖层已移除，不再需要移动中的像素布局节流
   static const _initialPosition = CameraPosition(
     target: LatLng(37.7749, -122.4194), // San Francisco default
     zoom: 12,
   );
 
-  // 隐藏默认 POI 图层，避免与自定义覆盖层重叠
-  static const _mapStyleHidePoi = '[{"featureType":"poi","stylers":[{"visibility":"off"}]}]';
+  // 默认使用 Google 样式（不再隐藏 POI 图层）
+  static const _mapStyleDefault = '[]';
 
   // 自定义图标缓存（按主类型）
   final Map<String, BitmapDescriptor> _typeIconCache = {};
@@ -120,7 +117,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     });
   }
 
-  // 根据相机状态与可见范围刷新用于密集覆盖层的附近 places
+  // 根据相机状态与可见范围刷新附近 places（用于 Marker 展示）
   Future<void> _refreshOverlayPlaces(BuildContext context) async {
     final c = ref.read(mapControllerProvider);
     if (c == null) return;
@@ -224,85 +221,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     ref.read(overlayRefreshStateProvider.notifier).state = OverlayRefreshState(center: center, zoom: z, at: now);
   }
 
-  // 将候选 places 计算为像素坐标并进行矩形碰撞裁剪
-  Future<void> _layoutOverlayItems(BuildContext context) async {
-    final c = ref.read(mapControllerProvider);
-    if (c == null) return;
-    final list = ref.read(overlayPlacesProvider);
-    final selected = ref.read(selectedPlaceProvider);
-    if (list.isEmpty) {
-      ref.read(overlayRenderItemsProvider.notifier).state = const [];
-      return;
-    }
-    final size = MediaQuery.of(context).size;
-    final fraction = ref.read(sheetFractionProvider).clamp(0.0, 0.95);
-    final usableHeight = size.height * (1 - fraction) - 8; // 底部上方留白
-    final statusBar = MediaQuery.of(context).padding.top;
-    final leftPad = 0.0, rightPad = 0.0, topPad = statusBar + 8.0;
-
-    // maxCount 与 _refreshOverlayPlaces 中一致
-    final z = ref.read(cameraPositionProvider)?.zoom ?? 14.0;
-    int maxCount;
-    if (z < 11) {
-      maxCount = 20;
-    } else if (z < 13) {
-      maxCount = 30;
-    } else if (z < 15) {
-      maxCount = 45;
-    } else if (z < 17) {
-      maxCount = 60;
-    } else {
-      maxCount = 80;
-    }
-
-    final rects = <ui.Rect>[];
-    final results = <OverlayRenderItem>[];
-    for (final p in list) {
-      if (selected?.placeId != null && p.id == selected!.placeId) {
-        continue; // 选中项交由 PlaceOverlayLayer 渲染
-      }
-      try {
-        final sc = await c.getScreenCoordinate(LatLng(p.location.lat, p.location.lng));
-        final x = sc.x.toDouble();
-        final y = sc.y.toDouble();
-        if (x < leftPad || x > size.width - rightPad) continue;
-        if (y < topPad || y > usableHeight) continue;
-
-        // 动态测量文本宽高（两行内）
-        final textSpan = TextSpan(text: p.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500));
-        final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr, maxLines: 2, ellipsis: '…');
-        tp.layout(maxWidth: 160);
-        final labelW = tp.width;
-        final labelH = tp.height;
-        const hPad = 10.0; // 文字左右内边距
-        const vPad = 4.0;  // 文字上下内边距
-        const gap = 4.0;   // 文字与图标间距
-        const iconSize = 20.0;
-
-        final boxW = labelW + hPad * 2;
-        final boxH = labelH + vPad * 2 + gap + iconSize;
-        final left = (x - boxW / 2).clamp(leftPad, size.width - rightPad - boxW);
-        final top = (y - (iconSize + gap + vPad * 2 + labelH)).clamp(topPad, usableHeight - boxH);
-        final rect = ui.Rect.fromLTWH(left, top, boxW, boxH);
-
-        // 碰撞检测：与已有矩形相交则跳过
-        bool collide = false;
-        for (final r in rects) {
-          if (r.overlaps(rect)) {
-            collide = true;
-            break;
-          }
-        }
-        if (collide) continue;
-        rects.add(rect);
-        results.add(OverlayRenderItem(place: p, pos: OverlayPos(x, y)));
-        if (results.length >= maxCount) break;
-      } catch (_) {
-        // 忽略无法转换的点
-      }
-    }
-    ref.read(overlayRenderItemsProvider.notifier).state = results;
-  }
+  // 不再进行像素布局：覆盖层已移除
 
   @override
   void dispose() {
@@ -435,7 +354,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     final useAmap = ref.watch(useAmapProvider);
     final searchResults = ref.watch(searchResultsProvider);
     final selected = ref.watch(selectedPlaceProvider);
-    final overlayEnabled = ref.watch(overlayEnabledProvider);
+    // 覆盖层已移除
 
     final markers = <Marker>{};
     final polylines = <Polyline>{};
@@ -463,13 +382,6 @@ class _MapPageState extends ConsumerState<MapPage> {
             // 立即相机聚焦并放大，高亮并显示信息窗
             final c = ref.read(mapControllerProvider);
             if (c != null) {
-              // 更新覆盖层像素坐标
-              () async {
-                try {
-                  final sc = await c.getScreenCoordinate(LatLng(n.point.lat, n.point.lng));
-                  ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
-                } catch (_) {}
-              }();
               unawaited(c.animateCamera(
                 CameraUpdate.newCameraPosition(
                   CameraPosition(target: LatLng(n.point.lat, n.point.lng), zoom: 16),
@@ -495,6 +407,41 @@ class _MapPageState extends ConsumerState<MapPage> {
         }
       }
     });
+
+    // 附近 Place（通过 Places API 获取）标记
+    final nearbyPlaces = ref.watch(overlayPlacesProvider);
+    for (final p in nearbyPlaces) {
+      final typeKey = _mainTypeKey(p.types);
+      final custom = _typeIconCache[typeKey];
+      if (custom == null) {
+        unawaited(_ensureIconBuilt(typeKey));
+      }
+      markers.add(Marker(
+        markerId: MarkerId('nearby_${p.id}'),
+        position: LatLng(p.location.lat, p.location.lng),
+        infoWindow: InfoWindow(title: p.name),
+        icon: (custom ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
+        onTap: () {
+          ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
+            placeId: p.id,
+            title: p.name,
+            point: model.LatLngPoint(p.location.lat, p.location.lng),
+          );
+          ref.read(panelPageProvider.notifier).state = PanelPage.detail;
+          final c = ref.read(mapControllerProvider);
+          if (c != null) {
+            unawaited(c.animateCamera(
+              CameraUpdate.newCameraPosition(
+                CameraPosition(target: LatLng(p.location.lat, p.location.lng), zoom: 16),
+              ),
+            ));
+            unawaited(Future.delayed(const Duration(milliseconds: 50), () {
+              c.showMarkerInfoWindow(MarkerId('nearby_${p.id}'));
+            }));
+          }
+        },
+      ));
+    }
 
     // 搜索结果标记
     for (final p in searchResults) {
@@ -522,13 +469,6 @@ class _MapPageState extends ConsumerState<MapPage> {
           // 立即相机聚焦并放大，显示信息窗
           final c = ref.read(mapControllerProvider);
           if (c != null) {
-            // 更新覆盖层像素坐标
-            () async {
-              try {
-                final sc = await c.getScreenCoordinate(LatLng(p.location.lat, p.location.lng));
-                ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
-              } catch (_) {}
-            }();
             unawaited(c.animateCamera(
               CameraUpdate.newCameraPosition(
                 CameraPosition(target: LatLng(p.location.lat, p.location.lng), zoom: 16),
@@ -574,10 +514,10 @@ class _MapPageState extends ConsumerState<MapPage> {
             polylines: polylines,
             onMapCreated: (controller) {
               ref.read(mapControllerProvider.notifier).state = controller;
-              // 应用样式：隐藏默认 POI 图层
+              // 应用默认样式（不隐藏 POI）
               () async {
                 try {
-                  await controller.setMapStyle(_mapStyleHidePoi);
+                  await controller.setMapStyle(_mapStyleDefault);
                 } catch (_) {}
               }();
               // 初始化可见区域
@@ -592,42 +532,6 @@ class _MapPageState extends ConsumerState<MapPage> {
             },
             onCameraMove: (pos) async {
               ref.read(cameraPositionProvider.notifier).state = pos;
-              final sel = ref.read(selectedPlaceProvider);
-              final c = ref.read(mapControllerProvider);
-              if (sel != null && c != null) {
-                try {
-                  final sc = await c.getScreenCoordinate(LatLng(sel.point.lat, sel.point.lng));
-                  ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
-                } catch (_) {}
-              }
-              // 覆盖层开启时才进行布局与整体位移
-              if (ref.read(overlayEnabledProvider)) {
-                // 让密集覆盖层在相机移动时也能跟随（不触发网络，仅重算像素位置），做简单节流
-                final now = DateTime.now();
-                final since = _lastLayoutAt == null ? const Duration(milliseconds: 999) : now.difference(_lastLayoutAt!);
-                if (since.inMilliseconds > 120) {
-                  unawaited(_layoutOverlayItems(context));
-                  _lastLayoutAt = now;
-                }
-
-                // 基于相机 target 的屏幕像素做整体位移，提升跟手性
-                if (c != null) {
-                  try {
-                    final sc = await c.getScreenCoordinate(LatLng(pos.target.latitude, pos.target.longitude));
-                    final current = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
-                    final base = ref.read(centerScreenPosProvider);
-                    if (base == null) {
-                      // 本次移动的起点
-                      ref.read(centerScreenPosProvider.notifier).state = current;
-                      ref.read(overlayShiftProvider.notifier).state = const OverlayPos(0, 0);
-                    } else {
-                      final dx = current.x - base.x;
-                      final dy = current.y - base.y;
-                      ref.read(overlayShiftProvider.notifier).state = OverlayPos(dx, dy);
-                    }
-                  } catch (_) {}
-                }
-              }
             },
             onCameraIdle: () async {
               final controller = ref.read(mapControllerProvider);
@@ -637,71 +541,12 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ref.read(visibleRegionProvider.notifier).state = bounds;
                 } catch (_) {}
               }
-              // 相机空闲后再校准一次覆盖层位置
-              final sel = ref.read(selectedPlaceProvider);
-              final c = ref.read(mapControllerProvider);
-              if (sel != null && c != null) {
-                try {
-                  final sc = await c.getScreenCoordinate(LatLng(sel.point.lat, sel.point.lng));
-                  ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
-                } catch (_) {}
-              }
-              // 刷新密集覆盖层候选与布局（仅在开启时）
-              if (ref.read(overlayEnabledProvider)) {
-                await _refreshOverlayPlaces(context);
-                await _layoutOverlayItems(context);
-                // 重置位移与基线
-                ref.read(centerScreenPosProvider.notifier).state = null;
-                ref.read(overlayShiftProvider.notifier).state = const OverlayPos(0, 0);
-              }
+              // 相机空闲后刷新附近 Places（用于 Marker 展示）
+              await _refreshOverlayPlaces(context);
             },
             onTap: (latLng) async {
-              // 地图点击：附近检索 place（优先），无结果则回退经纬度
-              final ps = ref.read(placesServiceProvider);
-              final nearby = await ps.searchNearby(
-                model.LatLngPoint(latLng.latitude, latLng.longitude),
-                radiusMeters: 120,
-              );
-              if (nearby.isNotEmpty) {
-                final p = nearby.first;
-                ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
-                  placeId: p.id,
-                  title: p.name,
-                  point: p.location,
-                );
-                ref.read(panelPageProvider.notifier).state = PanelPage.detail;
-                final c = ref.read(mapControllerProvider);
-                if (c != null) {
-                  unawaited(c.animateCamera(
-                    CameraUpdate.newCameraPosition(
-                      CameraPosition(target: LatLng(p.location.lat, p.location.lng), zoom: 16),
-                    ),
-                  ));
-                }
-              } else {
-                ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
-                  title: '所选位置',
-                  point: model.LatLngPoint(latLng.latitude, latLng.longitude),
-                );
-                ref.read(panelPageProvider.notifier).state = PanelPage.detail;
-                final c = ref.read(mapControllerProvider);
-                if (c != null) {
-                  unawaited(c.animateCamera(
-                    CameraUpdate.newCameraPosition(
-                      CameraPosition(target: latLng, zoom: 16),
-                    ),
-                  ));
-                }
-              }
-              // 计算覆盖层像素位置
-              final c2 = ref.read(mapControllerProvider);
-              final sel = ref.read(selectedPlaceProvider);
-              if (c2 != null && sel != null) {
-                try {
-                  final sc = await c2.getScreenCoordinate(LatLng(sel.point.lat, sel.point.lng));
-                  ref.read(selectedOverlayPosProvider.notifier).state = OverlayPos(sc.x.toDouble(), sc.y.toDouble());
-                } catch (_) {}
-              }
+              // 清空选中，关闭 InfoWindow
+              ref.read(selectedPlaceProvider.notifier).state = null;
             },
             onLongPress: _onLongPress,
           );
@@ -709,8 +554,6 @@ class _MapPageState extends ConsumerState<MapPage> {
       body: Stack(
         children: [
           mapWidget,
-          if (ref.watch(overlayEnabledProvider)) const PlaceDenseOverlayLayer(),
-          if (ref.watch(overlayEnabledProvider)) const PlaceOverlayLayer(),
           Positioned(
             top: MediaQuery.of(context).padding.top + 12,
             left: 12,
@@ -720,10 +563,8 @@ class _MapPageState extends ConsumerState<MapPage> {
                 foregroundColor: Colors.black87,
                 shadowColor: Colors.transparent,
                 elevation: 2,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               onPressed: () => _fitToNodes(context),
               icon: const Icon(Icons.center_focus_strong),
@@ -736,28 +577,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               ),
             ),
           ),
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 12,
-            right: 12,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                foregroundColor: Colors.black87,
-                shadowColor: Colors.transparent,
-                elevation: 2,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: () {
-                ref.read(overlayEnabledProvider.notifier).state = !overlayEnabled;
-              },
-              icon: Icon(overlayEnabled ? Icons.layers : Icons.layers_clear),
-              label: Text(overlayEnabled ? '覆盖层: 开' : '覆盖层: 关'),
-            ).glassy(
-              borderRadius: 12,
-              settings: const LiquidGlassSettings(blur: 1),
-            ),
-          ),
+          // 覆盖层控制按钮移除
           TimelinePanel(controller: _sheetController),
           if (planAsync.isLoading)
             const Positioned.fill(
