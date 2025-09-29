@@ -381,12 +381,25 @@ class TimelinePanel extends ConsumerWidget {
                                   ));
                                   final c = ref.read(mapControllerProvider);
                                   if (c != null) {
+                                    // 使用可见区域纬度跨度 + 面板高度，计算与 _fitToNodes 相同的向上偏移
+                                    final bounds = ref.read(visibleRegionProvider);
+                                    final fraction = ref
+                                        .read(sheetFractionProvider)
+                                        .clamp(0.0, 0.95);
+                                    LatLng target;
+                                    if (bounds == null) {
+                                      target = LatLng(n.point.lat, n.point.lng);
+                                    } else {
+                                      final latSpan = (bounds.northeast.latitude -
+                                              bounds.southwest.latitude)
+                                          .abs();
+                                      final safeSpan = latSpan < 1e-5 ? 1e-3 : latSpan;
+                                      final shiftLat = safeSpan * (fraction * 0.9);
+                                      target = LatLng(n.point.lat - shiftLat, n.point.lng);
+                                    }
                                     await c.animateCamera(
                                       CameraUpdate.newCameraPosition(
-                                        CameraPosition(
-                                            target: LatLng(
-                                                n.point.lat, n.point.lng),
-                                            zoom: 16),
+                                        CameraPosition(target: target, zoom: 16),
                                       ),
                                     );
                                     await Future.delayed(
