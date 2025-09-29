@@ -73,7 +73,7 @@ class MapPage extends HookConsumerWidget {
       if (typeIconCache.value.containsKey(key) || pendingIconKeys.value.contains(key)) return;
       pendingIconKeys.value = {...pendingIconKeys.value, key};
       final (iconData, bg) = iconForType(key);
-      final bmp = await MarkerIconFactory.create(icon: iconData, background: bg, foreground: Colors.white, size: 112);
+      final bmp = await MarkerIconFactory.create(icon: iconData, background: bg, foreground: Colors.white, size: 64);
       if (!context.mounted) return;
       final next = Map<String, BitmapDescriptor>.from(typeIconCache.value)..[key] = bmp;
       typeIconCache.value = next;

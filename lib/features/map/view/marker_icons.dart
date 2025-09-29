@@ -10,12 +10,14 @@ class MarkerIconFactory {
     required IconData icon,
     Color background = Colors.indigo,
     Color foreground = Colors.white,
-    double size = 96, // 像素
+    double size = 24, // 像素
   }) async {
-    final key = '${icon.codePoint}_${background.toARGB32()}_${foreground.toARGB32()}_${size.toInt()}';
+    final key =
+        '${icon.codePoint}_${background.toARGB32()}_${foreground.toARGB32()}_${size.toInt()}';
     final cached = _cache[key];
     if (cached != null) return cached;
-    final fut = _draw(icon: icon, background: background, foreground: foreground, size: size);
+    final fut = _draw(
+        icon: icon, background: background, foreground: foreground, size: size);
     _cache[key] = fut;
     return fut;
   }
@@ -36,7 +38,7 @@ class MarkerIconFactory {
 
     // 绘制图标（使用 TextPainter 渲染 IconData 字形）
     final textPainter = TextPainter(textDirection: TextDirection.ltr);
-    final iconSize = size * 0.58; // 留白
+    final iconSize = size * 0.54; // 留白略多，让图标更精致
     textPainter.text = TextSpan(
       text: String.fromCharCode(icon.codePoint),
       style: TextStyle(
