@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/latlng_point.dart' as model;
 import '../../core/providers.dart';
 import '../plan/presentation/plan_controller.dart';
+import '../../core/services/places_service.dart' as places;
 
 class SearchPage extends HookConsumerWidget {
   const SearchPage({super.key});
@@ -27,7 +28,8 @@ class SearchPage extends HookConsumerWidget {
         if (planAsync.hasValue && planAsync.value!.currentPlan.nodes.isNotEmpty) {
           near = planAsync.value!.currentPlan.nodes.last.point;
         }
-        final list = await repo.searchText(q, near: near);
+        final either = await repo.searchText(q, near: near).run();
+        final list = either.getOrElse((_) => <places.PlaceItem>[]);
         results.value = list
             .map((e) => _ResultItem(name: e.name, address: e.address, point: e.location))
             .toList();

@@ -46,11 +46,8 @@ final overlayCacheProvider = StateProvider<Map<String, OverlayCacheEntry>>((ref)
 // Place 详情（评分/评论/照片等）
 final placeDetailsProvider = FutureProvider.family<places.PlaceDetails?, String>((ref, placeId) async {
   final repo = ref.read(placesRepositoryProvider);
-  try {
-    return await repo.fetchPlaceDetails(placeId);
-  } catch (_) {
-    return null;
-  }
+  final either = await repo.fetchPlaceDetails(placeId).run();
+  return either.getOrElse((_) => null);
 });
 
 class SelectedPlace {

@@ -4,6 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../core/providers.dart';
 import '../../../core/utils/haversine.dart';
+import '../../../core/services/places_service.dart' as places;
 import '../view/providers.dart';
 import '../../../core/models/latlng_point.dart' as model;
 
@@ -77,10 +78,13 @@ class OverlayController {
     }
 
     final repo = ref.read(placesRepositoryProvider);
-    final items = await repo.searchNearby(
-      model.LatLngPoint(center.latitude, center.longitude),
-      radiusMeters: radius,
-    );
+    final either = await repo
+        .searchNearby(
+          model.LatLngPoint(center.latitude, center.longitude),
+          radiusMeters: radius,
+        )
+        .run();
+    final items = either.getOrElse((_) => <places.PlaceItem>[]).toList(growable: true);
 
     // 综合排序（与原逻辑一致）
     double typeWeight(List<String> types) {
