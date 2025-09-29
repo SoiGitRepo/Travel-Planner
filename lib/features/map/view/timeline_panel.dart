@@ -381,26 +381,30 @@ class TimelinePanel extends ConsumerWidget {
                                   ));
                                   final c = ref.read(mapControllerProvider);
                                   if (c != null) {
-                                    // 使用可见区域纬度跨度 + 面板高度，计算与 _fitToNodes 相同的向上偏移
                                     final bounds = ref.read(visibleRegionProvider);
                                     final fraction = ref
                                         .read(sheetFractionProvider)
                                         .clamp(0.0, 0.95);
-                                    LatLng target;
-                                    if (bounds == null) {
-                                      target = LatLng(n.point.lat, n.point.lng);
+                                    final raw = LatLng(n.point.lat, n.point.lng);
+                                    CameraPosition pos;
+                                    if (bounds != null) {
+                                      final minLat = bounds.southwest.latitude;
+                                      final maxLat = bounds.northeast.latitude;
+                                      final spanLat = (maxLat - minLat).abs();
+                                      if (spanLat > 1e-7) {
+                                        final centerLat =
+                                            raw.latitude + spanLat * (fraction / 2.0);
+                                        pos = CameraPosition(
+                                            target: LatLng(centerLat, raw.longitude),
+                                            zoom: 16);
+                                      } else {
+                                        pos = CameraPosition(target: raw, zoom: 16);
+                                      }
                                     } else {
-                                      final latSpan = (bounds.northeast.latitude -
-                                              bounds.southwest.latitude)
-                                          .abs();
-                                      final safeSpan = latSpan < 1e-5 ? 1e-3 : latSpan;
-                                      final shiftLat = safeSpan * (fraction * 0.9);
-                                      target = LatLng(n.point.lat - shiftLat, n.point.lng);
+                                      pos = CameraPosition(target: raw, zoom: 16);
                                     }
                                     await c.animateCamera(
-                                      CameraUpdate.newCameraPosition(
-                                        CameraPosition(target: target, zoom: 16),
-                                      ),
+                                      CameraUpdate.newCameraPosition(pos),
                                     );
                                     await Future.delayed(
                                         const Duration(milliseconds: 50));
