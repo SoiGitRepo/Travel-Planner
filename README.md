@@ -96,3 +96,63 @@ GOOGLE_PLACES_API_KEY=你的_Places_API_Key
 
 - 若未配置 Key，搜索将返回空结果，但不会影响地图、时间轴等其他功能。
 - 搜索结果支持一键“加入计划”，并返回地图页查看新增节点与自动生成的路线段。
+
+## 架构与重构概览（2025-09）
+
+- 分层结构（feature-first）：
+  - `lib/features/<feature>/presentation`（UI、Hook/Consumer Widgets）
+  - `lib/features/<feature>/application`（用例、控制器、纯逻辑，可测试）
+  - `lib/features/<feature>/domain`（实体与仓库契约）
+  - `lib/features/<feature>/data`（数据源与仓库实现）
+  - `lib/core/`（跨域工具、路由、网络、模型、服务）
+- 状态管理：`hooks_riverpod` + `flutter_riverpod` 并存，逐步将有状态页面迁移为 Hook 组件。
+- 路由：`go_router`，集中定义于 `lib/routing/`，使用常量 `Routes`/`RouteNames`。
+- 数据访问：
+  - Places：`PlacesRepository`（domain） -> `PlacesRepositoryImpl`（data）。
+    - 远端：`PlacesRemoteDataSource`（默认使用 Retrofit 客户端 `PlacesApi` + Freezed DTO；内部保留 Dio 直调回退）。
+    - 回退：`PlacesService`（http）在远端不可用或响应为空时兜底。
+  - 路线：`RouteService` -> `GoogleRouteService`（支持无 Key 退化为直线）。
+- 地图业务：
+  - 附近检索与相机适配等逻辑下沉到 application 层：`overlay_controller.dart`、`camera_usecases.dart`。
+  - 页面主要负责渲染与事件委托，体积更小、逻辑内聚。
+
+### 常用命令
+
+```
+# 运行
+fvm flutter run
+
+# 分析与测试
+fvm flutter analyze
+fvm flutter test -r compact
+
+# Web 调试（可选）
+fvm flutter run -d chrome
+
+# 代码生成（freezed/json_serializable/retrofit/riverpod 等）
+fvm flutter pub run build_runner build --delete-conflicting-outputs
+```
+
+## 错误处理与回退策略（fpdart）
+
+- **失败类型**：位于 `lib/core/errors/failure.dart`，统一定义 `Failure` 及其子类（`NetworkFailure`、`ApiFailure`、`ParseFailure`、`UnknownFailure`）。
+- **显式错误仓库**：`PlacesRepositoryFx`（`lib/features/map/domain/places_repository_fx.dart`）返回 `TaskEither<Failure, T>`，默认 Provider `placesRepositoryFxProvider`（见 `lib/core/providers.dart`）。
+- **集成路径**：
+  - 首选：Retrofit + Freezed DTO（`PlacesApi` + `PlacesRemoteDataSource`）。
+  - 回退：失败/无 Key 时回退到 `PlacesService`（http）。
+  - 日志：数据源 `catch` 使用 `dart:developer` 的 `dev.log()` 记录异常与栈。
+
+### 使用示例
+
+```dart
+import 'package:travel_planner/core/providers.dart';
+import 'package:travel_planner/core/models/latlng_point.dart';
+
+final repo = ref.read(placesRepositoryFxProvider);
+final task = repo.searchText('coffee', near: const LatLngPoint(31.23, 121.47));
+final result = await task.run();
+result.match(
+  (failure) => debugPrint('失败: ${failure.code} ${failure.message}'),
+  (list) => debugPrint('成功, 条数: ${list.length}'),
+);
+```
