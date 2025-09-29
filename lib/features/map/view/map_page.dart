@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -60,15 +61,9 @@ class _MapPageState extends ConsumerState<MapPage> {
     final c = ref.read(mapControllerProvider);
     if (c == null) return;
     final fraction = ref.read(sheetFractionProvider).clamp(0.0, 0.95);
-    final bounds = ref.read(visibleRegionProvider);
-    double latSpan;
-    if (bounds != null) {
-      latSpan =
-          (bounds.northeast.latitude - bounds.southwest.latitude).abs();
-      latSpan = latSpan < 1e-5 ? 1e-3 : latSpan;
-    } else {
-      latSpan = 0.05; // 兜底跨度
-    }
+    // 基于 zoom 估算纬度跨度，避免依赖受面板遮挡影响的 visibleRegion
+    final currentZoom = ref.read(cameraPositionProvider)?.zoom ?? 14.0;
+    final latSpan = 360 / pow(2, currentZoom);
     final visibleRatio = (0.85 - fraction).clamp(0.2, 0.9);
     final targetSpan = latSpan * (1.0 / visibleRatio);
     final shiftLat = targetSpan * (fraction * 0.9);
