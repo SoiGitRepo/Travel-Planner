@@ -10,7 +10,7 @@ class MarkerIconFactory {
     required IconData icon,
     Color background = Colors.indigo,
     Color foreground = Colors.white,
-    double size = 24, // 像素
+    double size = 36, // 像素
   }) async {
     final key =
         '${icon.codePoint}_${background.toARGB32()}_${foreground.toARGB32()}_${size.toInt()}';

@@ -27,15 +27,20 @@ class MapPage extends HookConsumerWidget {
       target: LatLng(37.7749, -122.4194),
       zoom: 12,
     );
-    const mapStyleDefault = '[{"featureType":"poi","elementType":"labels","stylers":[{"visibility":"off"}]}]';
+    const mapStyleDefault =
+        '[{"featureType":"poi","elementType":"labels","stylers":[{"visibility":"off"}]}]';
 
     // hooks 状态
-    final sheetController = useMemoized(() => DraggableScrollableController(), const []);
+    final sheetController =
+        useMemoized(() => DraggableScrollableController(), const []);
     final fitDebounce = useRef<Timer?>(null);
     final lastAnimateAt = useRef<DateTime?>(null);
     final lastSheetSize = useRef<double>(0.2);
     final typeIconCache = useState<Map<String, BitmapDescriptor>>({});
     final pendingIconKeys = useState<Set<String>>({});
+    // 附近地点专用更小尺寸图标缓存
+    final nearbyIconCache = useState<Map<String, BitmapDescriptor>>({});
+    final pendingNearbyIconKeys = useState<Set<String>>({});
 
     String mainTypeKey(List<String> types) {
       if (types.contains('tourist_attraction')) return 'tourist_attraction';
@@ -70,19 +75,46 @@ class MapPage extends HookConsumerWidget {
     }
 
     Future<void> ensureIconBuilt(String key) async {
-      if (typeIconCache.value.containsKey(key) || pendingIconKeys.value.contains(key)) return;
+      if (typeIconCache.value.containsKey(key) ||
+          pendingIconKeys.value.contains(key)) {
+        return;
+      }
       pendingIconKeys.value = {...pendingIconKeys.value, key};
       final (iconData, bg) = iconForType(key);
-      final bmp = await MarkerIconFactory.create(icon: iconData, background: bg, foreground: Colors.white, size: 64);
+      final bmp = await MarkerIconFactory.create(
+          icon: iconData, background: bg, foreground: Colors.white, size: 36);
       if (!context.mounted) return;
-      final next = Map<String, BitmapDescriptor>.from(typeIconCache.value)..[key] = bmp;
+      final next = Map<String, BitmapDescriptor>.from(typeIconCache.value)
+        ..[key] = bmp;
       typeIconCache.value = next;
       final nextPending = Set<String>.from(pendingIconKeys.value)..remove(key);
       pendingIconKeys.value = nextPending;
     }
 
-    Future<void> focusPlacePanelAware(model.LatLngPoint p, {double zoom = 16, bool animate = true}) async {
-      await ref.read(cameraUsecaseProvider).focusPlacePanelAware(p, zoom: zoom, animate: animate);
+    // 为附近地点生成更小的图标（例如 28px）
+    Future<void> ensureNearbyIconBuilt(String key) async {
+      if (nearbyIconCache.value.containsKey(key) ||
+          pendingNearbyIconKeys.value.contains(key)) {
+        return;
+      }
+      pendingNearbyIconKeys.value = {...pendingNearbyIconKeys.value, key};
+      final (iconData, bg) = iconForType(key);
+      final bmp = await MarkerIconFactory.create(
+          icon: iconData, background: bg, foreground: Colors.white, size: 28);
+      if (!context.mounted) return;
+      final next = Map<String, BitmapDescriptor>.from(nearbyIconCache.value)
+        ..[key] = bmp;
+      nearbyIconCache.value = next;
+      final nextPending = Set<String>.from(pendingNearbyIconKeys.value)
+        ..remove(key);
+      pendingNearbyIconKeys.value = nextPending;
+    }
+
+    Future<void> focusPlacePanelAware(model.LatLngPoint p,
+        {double zoom = 16, bool animate = true}) async {
+      await ref
+          .read(cameraUsecaseProvider)
+          .focusPlacePanelAware(p, zoom: zoom, animate: animate);
     }
 
     Future<void> fitToNodes({bool animate = true}) async {
@@ -96,9 +128,9 @@ class MapPage extends HookConsumerWidget {
     Future<void> onLongPress(LatLng point) async {
       final mode = ref.read(transportModeProvider);
       await ref.read(planControllerProvider.notifier).addNodeAt(
-        model.LatLngPoint(point.latitude, point.longitude),
-        mode: mode,
-      );
+            model.LatLngPoint(point.latitude, point.longitude),
+            mode: mode,
+          );
       if (ref.read(panelPageProvider) == PanelPage.timeline) {
         unawaited(fitToNodes());
       }
@@ -108,8 +140,10 @@ class MapPage extends HookConsumerWidget {
     useEffect(() {
       () async {
         try {
-          final availability = await GoogleApiAvailability.instance.checkGooglePlayServicesAvailability();
-          final useAmap = availability != GooglePlayServicesAvailability.success;
+          final availability = await GoogleApiAvailability.instance
+              .checkGooglePlayServicesAvailability();
+          final useAmap =
+              availability != GooglePlayServicesAvailability.success;
           if (context.mounted) {
             ref.read(useAmapProvider.notifier).state = useAmap;
           }
@@ -127,10 +161,13 @@ class MapPage extends HookConsumerWidget {
         fitDebounce.value = Timer(const Duration(milliseconds: 90), () {
           final delta = (size - lastSheetSize.value).abs();
           final now = DateTime.now();
-          final since = lastAnimateAt.value == null ? const Duration(milliseconds: 999) : now.difference(lastAnimateAt.value!);
+          final since = lastAnimateAt.value == null
+              ? const Duration(milliseconds: 999)
+              : now.difference(lastAnimateAt.value!);
           const snaps = [0.12, 0.6, 0.9];
           final nearSnap = snaps.any((s) => (size - s).abs() < 0.02);
-          final shouldAnimate = nearSnap || delta > 0.08 || since.inMilliseconds > 320;
+          final shouldAnimate =
+              nearSnap || delta > 0.08 || since.inMilliseconds > 320;
           if (ref.read(panelPageProvider) == PanelPage.timeline) {
             unawaited(fitToNodes(animate: shouldAnimate));
           }
@@ -140,6 +177,7 @@ class MapPage extends HookConsumerWidget {
           lastSheetSize.value = size;
         });
       }
+
       sheetController.addListener(listener);
       return () {
         fitDebounce.value?.cancel();
@@ -166,7 +204,9 @@ class MapPage extends HookConsumerWidget {
           position: LatLng(n.point.lat, n.point.lng),
           infoWindow: InfoWindow(title: n.title),
           icon: BitmapDescriptor.defaultMarkerWithHue(
-            (selected?.nodeId == n.id) ? BitmapDescriptor.hueRed : BitmapDescriptor.hueAzure,
+            (selected?.nodeId == n.id)
+                ? BitmapDescriptor.hueRed
+                : BitmapDescriptor.hueAzure,
           ),
           onTap: () async {
             ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
@@ -175,7 +215,9 @@ class MapPage extends HookConsumerWidget {
               point: n.point,
             );
             ref.read(panelPageProvider.notifier).state = PanelPage.detail;
-            await sheetController.animateTo(0.6, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+            await sheetController.animateTo(0.6,
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic);
             final c = ref.read(mapControllerProvider);
             if (c != null) {
               await focusPlacePanelAware(n.point, zoom: 16);
@@ -201,15 +243,16 @@ class MapPage extends HookConsumerWidget {
     final nearbyPlaces = ref.watch(overlayPlacesProvider);
     for (final p in nearbyPlaces) {
       final typeKey = mainTypeKey(p.types);
-      final custom = typeIconCache.value[typeKey];
-      if (custom == null) {
-        unawaited(ensureIconBuilt(typeKey));
+      final nearbyIcon = nearbyIconCache.value[typeKey];
+      if (nearbyIcon == null) {
+        unawaited(ensureNearbyIconBuilt(typeKey));
       }
       markers.add(Marker(
         markerId: MarkerId('nearby_${p.id}'),
         position: LatLng(p.location.lat, p.location.lng),
         infoWindow: InfoWindow(title: p.name),
-        icon: (custom ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
+        icon: (nearbyIcon ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
         onTap: () async {
           ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
             placeId: p.id,
@@ -217,10 +260,14 @@ class MapPage extends HookConsumerWidget {
             point: model.LatLngPoint(p.location.lat, p.location.lng),
           );
           ref.read(panelPageProvider.notifier).state = PanelPage.detail;
-          await sheetController.animateTo(0.6, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+          await sheetController.animateTo(0.6,
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic);
           final c = ref.read(mapControllerProvider);
           if (c != null) {
-            await focusPlacePanelAware(model.LatLngPoint(p.location.lat, p.location.lng), zoom: 16);
+            await focusPlacePanelAware(
+                model.LatLngPoint(p.location.lat, p.location.lng),
+                zoom: 16);
             c.showMarkerInfoWindow(MarkerId('nearby_${p.id}'));
           }
         },
@@ -240,7 +287,9 @@ class MapPage extends HookConsumerWidget {
         infoWindow: InfoWindow(title: p.name),
         icon: (selected?.placeId == p.id)
             ? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen)
-            : (custom ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
+            : (custom ??
+                BitmapDescriptor.defaultMarkerWithHue(
+                    BitmapDescriptor.hueRose)),
         onTap: () async {
           ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
             placeId: p.id,
@@ -248,10 +297,14 @@ class MapPage extends HookConsumerWidget {
             point: model.LatLngPoint(p.location.lat, p.location.lng),
           );
           ref.read(panelPageProvider.notifier).state = PanelPage.detail;
-          await sheetController.animateTo(0.6, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+          await sheetController.animateTo(0.6,
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic);
           final c = ref.read(mapControllerProvider);
           if (c != null) {
-            await focusPlacePanelAware(model.LatLngPoint(p.location.lat, p.location.lng), zoom: 16);
+            await focusPlacePanelAware(
+                model.LatLngPoint(p.location.lat, p.location.lng),
+                zoom: 16);
             c.showMarkerInfoWindow(MarkerId('search_${p.id}'));
           }
         },
@@ -267,9 +320,13 @@ class MapPage extends HookConsumerWidget {
               children: [
                 Icon(Icons.map, color: Colors.white70, size: 48),
                 SizedBox(height: 12),
-                Text('当前设备不支持谷歌服务，已切换高德地图（占位）', style: TextStyle(color: Colors.white70), textAlign: TextAlign.center),
+                Text('当前设备不支持谷歌服务，已切换高德地图（占位）',
+                    style: TextStyle(color: Colors.white70),
+                    textAlign: TextAlign.center),
                 SizedBox(height: 8),
-                Text('请稍后在配置中补充高德 API Key 后启用真实地图渲染', style: TextStyle(color: Colors.white38, fontSize: 12), textAlign: TextAlign.center),
+                Text('请稍后在配置中补充高德 API Key 后启用真实地图渲染',
+                    style: TextStyle(color: Colors.white38, fontSize: 12),
+                    textAlign: TextAlign.center),
               ],
             ),
           )
@@ -326,8 +383,10 @@ class MapPage extends HookConsumerWidget {
                 foregroundColor: Colors.black87,
                 shadowColor: Colors.transparent,
                 elevation: 2,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
               onPressed: () => fitToNodes(),
               icon: const Icon(Icons.center_focus_strong),
@@ -340,7 +399,8 @@ class MapPage extends HookConsumerWidget {
           TimelinePanel(controller: sheetController),
           if (planAsync.isLoading)
             const Positioned.fill(
-              child: IgnorePointer(child: Center(child: CircularProgressIndicator())),
+              child: IgnorePointer(
+                  child: Center(child: CircularProgressIndicator())),
             ),
         ],
       ),
