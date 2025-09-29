@@ -385,9 +385,9 @@ class TimelinePanel extends ConsumerWidget {
                                     final fraction = ref
                                         .read(sheetFractionProvider)
                                         .clamp(0.0, 0.95);
-                                    // 基于 zoom 估算纬度跨度，避免依赖受面板遮挡影响的 visibleRegion
-                                    final currentZoom = ref.read(cameraPositionProvider)?.zoom ?? 14.0;
-                                    final latSpan = 360 / pow(2, currentZoom);
+                                    // 基于目标 zoom 估算纬度跨度，以确保平移距离与最终视野匹配
+                                    const zoom = 16.0;
+                                    final latSpan = 360 / pow(2, zoom);
                                     // 将目标点置于可见区域的垂直中心，相机中心需下移 fraction/2 的屏幕高度
                                     final shiftLat = latSpan * (fraction / 2.0);
                                     final center = LatLng(
