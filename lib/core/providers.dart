@@ -9,8 +9,6 @@ import '../features/map/data/places_repository_impl.dart';
 import '../features/map/domain/places_repository.dart';
 import 'network/dio_client.dart';
 import '../features/map/data/places_remote_data_source.dart';
-import '../features/map/domain/places_repository_fx.dart';
-import '../features/map/data/places_repository_fx_impl.dart';
 
 final routeServiceProvider = Provider<RouteService>((ref) {
   return GoogleRouteService();
@@ -37,11 +35,5 @@ final placesRepositoryProvider = Provider<PlacesRepository>((ref) {
   final svc = ref.watch(placesServiceProvider);
   final remote = ref.watch(placesRemoteDataSourceProvider);
   return PlacesRepositoryImpl(svc, remote: remote);
-});
-
-/// fpdart 风格（TaskEither）仓库 Provider（包装现有仓库实现）
-final placesRepositoryFxProvider = Provider<PlacesRepositoryFx>((ref) {
-  final repo = ref.watch(placesRepositoryProvider);
-  return PlacesRepositoryFxImpl(repo);
 });
 
