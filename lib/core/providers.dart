@@ -27,7 +27,8 @@ final dioProvider = Provider<Dio>((ref) => createDio());
 
 final placesRemoteDataSourceProvider = Provider<PlacesRemoteDataSource>((ref) {
   final dio = ref.watch(dioProvider);
-  return PlacesRemoteDataSource.fromEnv(dio);
+  // 使用 Retrofit 客户端；数据源内部仍保留 Dio 直调回退
+  return PlacesRemoteDataSource.withRetrofit(dio);
 });
 
 final placesRepositoryProvider = Provider<PlacesRepository>((ref) {
@@ -35,3 +36,4 @@ final placesRepositoryProvider = Provider<PlacesRepository>((ref) {
   final remote = ref.watch(placesRemoteDataSourceProvider);
   return PlacesRepositoryImpl(svc, remote: remote);
 });
+

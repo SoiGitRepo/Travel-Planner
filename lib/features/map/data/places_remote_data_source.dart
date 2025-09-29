@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'places_api.dart';
+import 'dto/place_dto.dart';
 
 import '../../../core/models/latlng_point.dart';
 import '../../../core/services/places_service.dart' show PlaceItem, PlaceDetails;
@@ -7,30 +9,41 @@ import '../../../core/services/places_service.dart' show PlaceItem, PlaceDetails
 class PlacesRemoteDataSource {
   final Dio dio;
   final String? apiKey;
-  const PlacesRemoteDataSource({required this.dio, required this.apiKey});
+  final PlacesApi? api; // 可选的 Retrofit 客户端
+  const PlacesRemoteDataSource({required this.dio, required this.apiKey, this.api});
 
   factory PlacesRemoteDataSource.fromEnv(Dio dio) {
     final key = dotenv.env['GOOGLE_PLACES_API_KEY'] ?? dotenv.env['GOOGLE_DIRECTIONS_API_KEY'];
-    return PlacesRemoteDataSource(dio: dio, apiKey: key);
+    return PlacesRemoteDataSource(dio: dio, apiKey: key, api: null);
+  }
+
+  factory PlacesRemoteDataSource.withRetrofit(Dio dio) {
+    final key = dotenv.env['GOOGLE_PLACES_API_KEY'] ?? dotenv.env['GOOGLE_DIRECTIONS_API_KEY'];
+    return PlacesRemoteDataSource(dio: dio, apiKey: key, api: PlacesApi(dio));
   }
 
   bool get enabled => apiKey != null && apiKey!.isNotEmpty;
 
   Future<List<PlaceItem>> searchText(String query, {LatLngPoint? near, int? radiusMeters}) async {
     if (!enabled) return const [];
-    final params = <String, dynamic>{
+    final radius = (radiusMeters != null && radiusMeters > 0) ? radiusMeters : 30000;
+    final queries = <String, dynamic>{
       'query': query,
       'key': apiKey,
       'language': 'zh-CN',
+      if (near != null) 'location': '${near.lat},${near.lng}',
+      if (near != null) 'radius': radius,
     };
-    if (near != null) {
-      params['location'] = '${near.lat},${near.lng}';
-      params['radius'] = (radiusMeters != null && radiusMeters > 0) ? radiusMeters : 30000;
-    }
     try {
+      if (api != null) {
+        final resp = await api!.textSearch(queries);
+        final results = resp.data.results;
+        return results.map(_toPlaceItem).toList(growable: false);
+      }
+      // 回退：Dio 直调
       final resp = await dio.get(
         'https://maps.googleapis.com/maps/api/place/textsearch/json',
-        queryParameters: params,
+        queryParameters: queries,
       );
       if (resp.statusCode != 200) return const [];
       final data = resp.data as Map<String, dynamic>;
@@ -68,19 +81,21 @@ class PlacesRemoteDataSource {
 
   Future<List<PlaceItem>> searchNearby(LatLngPoint center, {int radiusMeters = 300, String? keyword}) async {
     if (!enabled) return const [];
-    final params = <String, dynamic>{
+    final queries = <String, dynamic>{
       'key': apiKey,
       'location': '${center.lat},${center.lng}',
       'radius': radiusMeters,
       'language': 'zh-CN',
+      if (keyword != null && keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
     };
-    if (keyword != null && keyword.trim().isNotEmpty) {
-      params['keyword'] = keyword.trim();
-    }
     try {
+      if (api != null) {
+        final resp = await api!.nearbySearch(queries);
+        return resp.data.results.map(_toPlaceItem).toList(growable: false);
+      }
       final resp = await dio.get(
         'https://maps.googleapis.com/maps/api/place/nearbysearch/json',
-        queryParameters: params,
+        queryParameters: queries,
       );
       if (resp.statusCode != 200) return const [];
       final data = resp.data as Map<String, dynamic>;
@@ -132,16 +147,23 @@ class PlacesRemoteDataSource {
       'opening_hours/weekday_text',
       'photos',
     ].join(',');
-    final params = <String, dynamic>{
+    final queries = <String, dynamic>{
       'key': apiKey,
       'place_id': placeId,
       'fields': fields,
       'language': 'zh-CN',
     };
     try {
+      if (api != null) {
+        final resp = await api!.details(queries);
+        final dto = resp.data.result;
+        if (dto == null) return null;
+        return _toPlaceDetails(dto);
+      }
+      // 回退：Dio 直调
       final resp = await dio.get(
         'https://maps.googleapis.com/maps/api/place/details/json',
-        queryParameters: params,
+        queryParameters: queries,
       );
       if (resp.statusCode != 200) return null;
       final data = resp.data as Map<String, dynamic>;
@@ -199,5 +221,52 @@ class PlacesRemoteDataSource {
     } catch (_) {
       return null;
     }
+  }
+
+  // --- DTO 映射 ---
+  PlaceItem _toPlaceItem(PlaceItemDto dto) {
+    final loc = dto.geometry?.location;
+    return PlaceItem(
+      id: dto.placeId,
+      name: dto.name,
+      address: dto.formattedAddress ?? dto.vicinity,
+      location: LatLngPoint((loc?.lat ?? 0).toDouble(), (loc?.lng ?? 0).toDouble()),
+      rating: dto.rating,
+      userRatingsTotal: dto.userRatingsTotal,
+      types: dto.types,
+      priceLevel: dto.priceLevel,
+    );
+  }
+
+  PlaceDetails _toPlaceDetails(PlaceDetailsDto dto) {
+    final loc = dto.geometry?.location;
+    // 照片 URL 拼装
+    final urls = <String>[];
+    for (final p in dto.photos) {
+      final ref = p.photoReference;
+      if (ref == null || ref.isEmpty) continue;
+      final maxWidth = p.width ?? 800;
+      final u = Uri.https('maps.googleapis.com', '/maps/api/place/photo', {
+        'maxwidth': maxWidth.toString(),
+        'photo_reference': ref,
+        'key': apiKey!,
+      });
+      urls.add(u.toString());
+      if (urls.length >= 8) break;
+    }
+    return PlaceDetails(
+      id: dto.placeId,
+      name: dto.name,
+      address: dto.formattedAddress,
+      location: (loc != null) ? LatLngPoint(loc.lat, loc.lng) : null,
+      rating: dto.rating,
+      userRatingsTotal: dto.userRatingsTotal,
+      types: dto.types,
+      priceLevel: dto.priceLevel,
+      phone: dto.formattedPhoneNumber,
+      website: dto.website,
+      openingWeekdayText: dto.openingHours?.weekdayText ?? const [],
+      photoUrls: urls,
+    );
   }
 }
