@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'dart:developer' as dev;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'places_api.dart';
 import 'dto/place_dto.dart';
@@ -74,7 +75,8 @@ class PlacesRemoteDataSource {
           priceLevel: price,
         );
       }).toList(growable: false);
-    } catch (_) {
+    } catch (e, st) {
+      dev.log('PlacesRemoteDataSource.searchText error: $e', name: 'places', stackTrace: st);
       return const [];
     }
   }
@@ -126,7 +128,8 @@ class PlacesRemoteDataSource {
           priceLevel: price,
         );
       }).toList(growable: false);
-    } catch (_) {
+    } catch (e, st) {
+      dev.log('PlacesRemoteDataSource.searchNearby error: $e', name: 'places', stackTrace: st);
       return const [];
     }
   }
@@ -218,7 +221,8 @@ class PlacesRemoteDataSource {
         openingWeekdayText: weekday,
         photoUrls: photoUrls,
       );
-    } catch (_) {
+    } catch (e, st) {
+      dev.log('PlacesRemoteDataSource.fetchPlaceDetails error: $e', name: 'places', stackTrace: st);
       return null;
     }
   }

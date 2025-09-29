@@ -61,3 +61,6 @@ ios/Runner/Environment.xcconfig
 
 # FVM Version Cache
 .fvm/
+
+# scripts
+scripts
