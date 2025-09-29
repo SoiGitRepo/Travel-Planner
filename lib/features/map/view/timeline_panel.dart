@@ -374,11 +374,11 @@ class TimelinePanel extends ConsumerWidget {
                                   ref.read(panelPageProvider.notifier).state =
                                       PanelPage.detail;
                                   // 面板移动到 60% 中档位置
-                                  unawaited(controller.animateTo(
+                                  await controller.animateTo(
                                     0.6,
                                     duration: const Duration(milliseconds: 260),
                                     curve: Curves.easeOutCubic,
-                                  ));
+                                  );
                                   final c = ref.read(mapControllerProvider);
                                   if (c != null) {
                                     // 面板感知：根据底部面板占比与当前可见区域跨度，计算上移偏移
@@ -399,8 +399,6 @@ class TimelinePanel extends ConsumerWidget {
                                             target: center, zoom: 16),
                                       ),
                                     );
-                                    await Future.delayed(
-                                        const Duration(milliseconds: 50));
                                     c.showMarkerInfoWindow(MarkerId(n.id));
                                   }
                                 },
