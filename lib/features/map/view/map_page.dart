@@ -407,7 +407,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 ? BitmapDescriptor.hueRed
                 : BitmapDescriptor.hueAzure,
           ),
-          onTap: () {
+          onTap: () async {
             ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
               nodeId: n.id,
               title: n.title,
@@ -415,19 +415,17 @@ class _MapPageState extends ConsumerState<MapPage> {
             );
             ref.read(panelPageProvider.notifier).state = PanelPage.detail;
             // 面板移动到 60% 中档位置
-            unawaited(_sheetController.animateTo(
+            await _sheetController.animateTo(
               0.6,
               duration: const Duration(milliseconds: 260),
               curve: Curves.easeOutCubic,
-            ));
+            );
             // 立即相机聚焦并放大（面板感知中心），高亮并显示信息窗
             final c = ref.read(mapControllerProvider);
             if (c != null) {
-              unawaited(_focusPlacePanelAware(n.point, zoom: 16));
+              await _focusPlacePanelAware(n.point, zoom: 16);
               // 尝试显示信息窗
-              unawaited(Future.delayed(const Duration(milliseconds: 50), () {
-                c.showMarkerInfoWindow(MarkerId(n.id));
-              }));
+              c.showMarkerInfoWindow(MarkerId(n.id));
             }
           },
         ));
@@ -459,7 +457,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         infoWindow: InfoWindow(title: p.name),
         icon: (custom ??
             BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
-        onTap: () {
+        onTap: () async {
           ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
             placeId: p.id,
             title: p.name,
@@ -467,19 +465,17 @@ class _MapPageState extends ConsumerState<MapPage> {
           );
           ref.read(panelPageProvider.notifier).state = PanelPage.detail;
           // 面板移动到 60% 中档位置
-          unawaited(_sheetController.animateTo(
+          await _sheetController.animateTo(
             0.6,
             duration: const Duration(milliseconds: 260),
             curve: Curves.easeOutCubic,
-          ));
+          );
           final c = ref.read(mapControllerProvider);
           if (c != null) {
-            unawaited(_focusPlacePanelAware(
+            await _focusPlacePanelAware(
                 model.LatLngPoint(p.location.lat, p.location.lng),
-                zoom: 16));
-            unawaited(Future.delayed(const Duration(milliseconds: 50), () {
-              c.showMarkerInfoWindow(MarkerId('nearby_${p.id}'));
-            }));
+                zoom: 16);
+            c.showMarkerInfoWindow(MarkerId('nearby_${p.id}'));
           }
         },
       ));
@@ -503,7 +499,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             : (custom ??
                 BitmapDescriptor.defaultMarkerWithHue(
                     BitmapDescriptor.hueRose)),
-        onTap: () {
+        onTap: () async {
           ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
             placeId: p.id,
             title: p.name,
@@ -511,20 +507,18 @@ class _MapPageState extends ConsumerState<MapPage> {
           );
           ref.read(panelPageProvider.notifier).state = PanelPage.detail;
           // 面板移动到 60% 中档位置
-          unawaited(_sheetController.animateTo(
+          await _sheetController.animateTo(
             0.6,
             duration: const Duration(milliseconds: 260),
             curve: Curves.easeOutCubic,
-          ));
+          );
           // 立即相机聚焦并放大（面板感知中心），显示信息窗
           final c = ref.read(mapControllerProvider);
           if (c != null) {
-            unawaited(_focusPlacePanelAware(
+            await _focusPlacePanelAware(
                 model.LatLngPoint(p.location.lat, p.location.lng),
-                zoom: 16));
-            unawaited(Future.delayed(const Duration(milliseconds: 50), () {
-              c.showMarkerInfoWindow(MarkerId('search_${p.id}'));
-            }));
+                zoom: 16);
+            c.showMarkerInfoWindow(MarkerId('search_${p.id}'));
           }
         },
       ));
