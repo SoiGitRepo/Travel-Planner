@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:travel_planner/core/widgets/glassy/glassy.dart';
@@ -16,170 +17,142 @@ import 'marker_icons.dart';
 import '../application/overlay_controller.dart';
 import '../application/camera_usecases.dart';
 
-class MapPage extends ConsumerStatefulWidget {
+class MapPage extends HookConsumerWidget {
   const MapPage({super.key});
 
   @override
-  ConsumerState<MapPage> createState() => _MapPageState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 基础常量
+    const initialPosition = CameraPosition(
+      target: LatLng(37.7749, -122.4194),
+      zoom: 12,
+    );
+    const mapStyleDefault = '[{"featureType":"poi","elementType":"labels","stylers":[{"visibility":"off"}]}]';
 
-class _MapPageState extends ConsumerState<MapPage> {
-  final _sheetController = DraggableScrollableController();
-  Timer? _fitDebounce;
-  // 去除拖动结束后的二次动画，改为在接近吸附档位时直接使用动画，避免“两段式”停顿
-  DateTime? _lastAnimateAt; // 上一次使用 animate 的时间
-  double _lastSheetSize = 0.2; // 记录上一次的面板比例
-  // 覆盖层已移除，不再需要移动中的像素布局节流
-  static const _initialPosition = CameraPosition(
-    target: LatLng(37.7749, -122.4194), // San Francisco default
-    zoom: 12,
-  );
+    // hooks 状态
+    final sheetController = useMemoized(() => DraggableScrollableController(), const []);
+    final fitDebounce = useRef<Timer?>(null);
+    final lastAnimateAt = useRef<DateTime?>(null);
+    final lastSheetSize = useRef<double>(0.2);
+    final typeIconCache = useState<Map<String, BitmapDescriptor>>({});
+    final pendingIconKeys = useState<Set<String>>({});
 
-  //  Google Map样式（隐藏 POI 图层）
-  //
-  static const _mapStyleDefault =
-      '[{"featureType":"poi","elementType":"labels","stylers":[{"visibility":"off"}]}]';
-
-  // 自定义图标缓存（按主类型）
-  final Map<String, BitmapDescriptor> _typeIconCache = {};
-  final Set<String> _pendingIconKeys = {};
-
-  String _mainTypeKey(List<String> types) {
-    if (types.contains('tourist_attraction')) return 'tourist_attraction';
-    if (types.contains('museum')) return 'museum';
-    if (types.contains('art_gallery')) return 'art_gallery';
-    if (types.contains('park')) return 'park';
-    if (types.contains('restaurant')) return 'restaurant';
-    if (types.contains('cafe')) return 'cafe';
-    if (types.contains('shopping_mall')) return 'shopping_mall';
-    return 'default';
-  }
-
-  Future<void> _focusPlacePanelAware(model.LatLngPoint p,
-      {double zoom = 16, bool animate = true}) async {
-    await ref
-        .read(cameraUsecaseProvider)
-        .focusPlacePanelAware(p, zoom: zoom, animate: animate);
-  }
-
-  (IconData, Color) _iconForType(String key) {
-    switch (key) {
-      case 'tourist_attraction':
-        return (Icons.attractions, Colors.orange);
-      case 'museum':
-        return (Icons.museum, Colors.brown);
-      case 'art_gallery':
-        return (Icons.brush, Colors.deepPurple);
-      case 'park':
-        return (Icons.park, Colors.green);
-      case 'restaurant':
-        return (Icons.restaurant, Colors.redAccent);
-      case 'cafe':
-        return (Icons.local_cafe, Colors.brown);
-      case 'shopping_mall':
-        return (Icons.local_mall, Colors.indigo);
-      default:
-        return (Icons.place, Colors.blueGrey);
+    String mainTypeKey(List<String> types) {
+      if (types.contains('tourist_attraction')) return 'tourist_attraction';
+      if (types.contains('museum')) return 'museum';
+      if (types.contains('art_gallery')) return 'art_gallery';
+      if (types.contains('park')) return 'park';
+      if (types.contains('restaurant')) return 'restaurant';
+      if (types.contains('cafe')) return 'cafe';
+      if (types.contains('shopping_mall')) return 'shopping_mall';
+      return 'default';
     }
-  }
 
-  Future<void> _ensureIconBuilt(String key) async {
-    if (_typeIconCache.containsKey(key) || _pendingIconKeys.contains(key)) {
-      return;
-    }
-    _pendingIconKeys.add(key);
-    final (iconData, bg) = _iconForType(key);
-    final bmp = await MarkerIconFactory.create(
-        icon: iconData, background: bg, foreground: Colors.white, size: 112);
-    _typeIconCache[key] = bmp;
-    _pendingIconKeys.remove(key);
-    if (mounted) setState(() {});
-  }
-
-  // 注意：不要在 initState 使用 ref.listen（Riverpod 限制）。
-
-  @override
-  void initState() {
-    super.initState();
-    _initMapProvider();
-    _sheetController.addListener(() {
-      final size = _sheetController.size; // 0-1
-      ref.read(sheetFractionProvider.notifier).state = size;
-      // 拖动中节流触发视野适配：接近吸附档位时直接用动画，否则根据变化幅度与节流使用 move
-      _fitDebounce?.cancel();
-      _fitDebounce = Timer(const Duration(milliseconds: 90), () {
-        final delta = (size - _lastSheetSize).abs();
-        final now = DateTime.now();
-        final since = _lastAnimateAt == null
-            ? const Duration(milliseconds: 999)
-            : now.difference(_lastAnimateAt!);
-        const snaps = [0.12, 0.6, 0.9];
-        final nearSnap = snaps.any((s) => (size - s).abs() < 0.02);
-        final shouldAnimate =
-            nearSnap || delta > 0.08 || since.inMilliseconds > 320;
-        // 仅在时间轴页面自动适配整计划
-        if (ref.read(panelPageProvider) == PanelPage.timeline) {
-          _fitToNodes(animate: shouldAnimate);
-        }
-        if (shouldAnimate) {
-          _lastAnimateAt = now;
-        }
-        _lastSheetSize = size;
-      });
-    });
-  }
-
-  // 根据相机状态与可见范围刷新附近 places（用于 Marker 展示）
-  Future<void> _refreshOverlayPlaces() async {
-    await ref.read(overlayControllerProvider).refreshFromCurrentView();
-  }
-
-  // 不再进行像素布局：覆盖层已移除
-
-  @override
-  void dispose() {
-    _fitDebounce?.cancel();
-    _sheetController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _initMapProvider() async {
-    // 仅 Android 设备有效，iOS/Web 直接使用 Google 地图
-    try {
-      final availability = await GoogleApiAvailability.instance
-          .checkGooglePlayServicesAvailability();
-      final useAmap = availability != GooglePlayServicesAvailability.success;
-      if (mounted) {
-        // 切换到高德（占位）或谷歌
-        ref.read(useAmapProvider.notifier).state = useAmap;
+    (IconData, Color) iconForType(String key) {
+      switch (key) {
+        case 'tourist_attraction':
+          return (Icons.attractions, Colors.orange);
+        case 'museum':
+          return (Icons.museum, Colors.brown);
+        case 'art_gallery':
+          return (Icons.brush, Colors.deepPurple);
+        case 'park':
+          return (Icons.park, Colors.green);
+        case 'restaurant':
+          return (Icons.restaurant, Colors.redAccent);
+        case 'cafe':
+          return (Icons.local_cafe, Colors.brown);
+        case 'shopping_mall':
+          return (Icons.local_mall, Colors.indigo);
+        default:
+          return (Icons.place, Colors.blueGrey);
       }
-    } catch (_) {
-      // 检测失败时，保持默认（使用 Google），避免影响开发
     }
-  }
 
-  Future<void> _fitToNodes({bool animate = true}) async {
-    await ref.read(cameraUsecaseProvider).fitToNodes(animate: animate);
-  }
+    Future<void> ensureIconBuilt(String key) async {
+      if (typeIconCache.value.containsKey(key) || pendingIconKeys.value.contains(key)) return;
+      pendingIconKeys.value = {...pendingIconKeys.value, key};
+      final (iconData, bg) = iconForType(key);
+      final bmp = await MarkerIconFactory.create(icon: iconData, background: bg, foreground: Colors.white, size: 112);
+      if (!context.mounted) return;
+      final next = Map<String, BitmapDescriptor>.from(typeIconCache.value)..[key] = bmp;
+      typeIconCache.value = next;
+      final nextPending = Set<String>.from(pendingIconKeys.value)..remove(key);
+      pendingIconKeys.value = nextPending;
+    }
 
-  Future<void> _onLongPress(LatLng point) async {
-    final mode = ref.read(transportModeProvider);
-    await ref.read(planControllerProvider.notifier).addNodeAt(
+    Future<void> focusPlacePanelAware(model.LatLngPoint p, {double zoom = 16, bool animate = true}) async {
+      await ref.read(cameraUsecaseProvider).focusPlacePanelAware(p, zoom: zoom, animate: animate);
+    }
+
+    Future<void> fitToNodes({bool animate = true}) async {
+      await ref.read(cameraUsecaseProvider).fitToNodes(animate: animate);
+    }
+
+    Future<void> refreshOverlayPlaces() async {
+      await ref.read(overlayControllerProvider).refreshFromCurrentView();
+    }
+
+    Future<void> onLongPress(LatLng point) async {
+      final mode = ref.read(transportModeProvider);
+      await ref.read(planControllerProvider.notifier).addNodeAt(
         model.LatLngPoint(point.latitude, point.longitude),
-        mode: mode);
-    // 仅时间轴页自动适配整计划
-    if (ref.read(panelPageProvider) == PanelPage.timeline) {
-      unawaited(_fitToNodes());
+        mode: mode,
+      );
+      if (ref.read(panelPageProvider) == PanelPage.timeline) {
+        unawaited(fitToNodes());
+      }
     }
-  }
 
-  @override
-  Widget build(BuildContext context) {
+    // 检测 Play Services 可用性并写入 Provider
+    useEffect(() {
+      () async {
+        try {
+          final availability = await GoogleApiAvailability.instance.checkGooglePlayServicesAvailability();
+          final useAmap = availability != GooglePlayServicesAvailability.success;
+          if (context.mounted) {
+            ref.read(useAmapProvider.notifier).state = useAmap;
+          }
+        } catch (_) {}
+      }();
+      return null;
+    }, const []);
+
+    // 监听底部面板滚动，更新 fraction 与相机自适配
+    useEffect(() {
+      void listener() {
+        final size = sheetController.size;
+        ref.read(sheetFractionProvider.notifier).state = size;
+        fitDebounce.value?.cancel();
+        fitDebounce.value = Timer(const Duration(milliseconds: 90), () {
+          final delta = (size - lastSheetSize.value).abs();
+          final now = DateTime.now();
+          final since = lastAnimateAt.value == null ? const Duration(milliseconds: 999) : now.difference(lastAnimateAt.value!);
+          const snaps = [0.12, 0.6, 0.9];
+          final nearSnap = snaps.any((s) => (size - s).abs() < 0.02);
+          final shouldAnimate = nearSnap || delta > 0.08 || since.inMilliseconds > 320;
+          if (ref.read(panelPageProvider) == PanelPage.timeline) {
+            unawaited(fitToNodes(animate: shouldAnimate));
+          }
+          if (shouldAnimate) {
+            lastAnimateAt.value = now;
+          }
+          lastSheetSize.value = size;
+        });
+      }
+      sheetController.addListener(listener);
+      return () {
+        fitDebounce.value?.cancel();
+        sheetController.removeListener(listener);
+        sheetController.dispose();
+      };
+    }, [sheetController]);
+
+    // 读取状态
     final planAsync = ref.watch(planControllerProvider);
     final useAmap = ref.watch(useAmapProvider);
     final searchResults = ref.watch(searchResultsProvider);
     final selected = ref.watch(selectedPlaceProvider);
-    // 覆盖层已移除
 
     final markers = <Marker>{};
     final polylines = <Polyline>{};
@@ -193,9 +166,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           position: LatLng(n.point.lat, n.point.lng),
           infoWindow: InfoWindow(title: n.title),
           icon: BitmapDescriptor.defaultMarkerWithHue(
-            (selected?.nodeId == n.id)
-                ? BitmapDescriptor.hueRed
-                : BitmapDescriptor.hueAzure,
+            (selected?.nodeId == n.id) ? BitmapDescriptor.hueRed : BitmapDescriptor.hueAzure,
           ),
           onTap: () async {
             ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
@@ -204,17 +175,10 @@ class _MapPageState extends ConsumerState<MapPage> {
               point: n.point,
             );
             ref.read(panelPageProvider.notifier).state = PanelPage.detail;
-            // 面板移动到 60% 中档位置
-            await _sheetController.animateTo(
-              0.6,
-              duration: const Duration(milliseconds: 260),
-              curve: Curves.easeOutCubic,
-            );
-            // 立即相机聚焦并放大（面板感知中心），高亮并显示信息窗
+            await sheetController.animateTo(0.6, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
             final c = ref.read(mapControllerProvider);
             if (c != null) {
-              await _focusPlacePanelAware(n.point, zoom: 16);
-              // 尝试显示信息窗
+              await focusPlacePanelAware(n.point, zoom: 16);
               c.showMarkerInfoWindow(MarkerId(n.id));
             }
           },
@@ -233,20 +197,19 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
     });
 
-    // 附近 Place（通过 Places API 获取）标记
+    // 附近 Place 标记
     final nearbyPlaces = ref.watch(overlayPlacesProvider);
     for (final p in nearbyPlaces) {
-      final typeKey = _mainTypeKey(p.types);
-      final custom = _typeIconCache[typeKey];
+      final typeKey = mainTypeKey(p.types);
+      final custom = typeIconCache.value[typeKey];
       if (custom == null) {
-        unawaited(_ensureIconBuilt(typeKey));
+        unawaited(ensureIconBuilt(typeKey));
       }
       markers.add(Marker(
         markerId: MarkerId('nearby_${p.id}'),
         position: LatLng(p.location.lat, p.location.lng),
         infoWindow: InfoWindow(title: p.name),
-        icon: (custom ??
-            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
+        icon: (custom ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
         onTap: () async {
           ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
             placeId: p.id,
@@ -254,17 +217,10 @@ class _MapPageState extends ConsumerState<MapPage> {
             point: model.LatLngPoint(p.location.lat, p.location.lng),
           );
           ref.read(panelPageProvider.notifier).state = PanelPage.detail;
-          // 面板移动到 60% 中档位置
-          await _sheetController.animateTo(
-            0.6,
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOutCubic,
-          );
+          await sheetController.animateTo(0.6, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
           final c = ref.read(mapControllerProvider);
           if (c != null) {
-            await _focusPlacePanelAware(
-                model.LatLngPoint(p.location.lat, p.location.lng),
-                zoom: 16);
+            await focusPlacePanelAware(model.LatLngPoint(p.location.lat, p.location.lng), zoom: 16);
             c.showMarkerInfoWindow(MarkerId('nearby_${p.id}'));
           }
         },
@@ -273,12 +229,10 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     // 搜索结果标记
     for (final p in searchResults) {
-      final typeKey = _mainTypeKey(p.types);
-      final custom = _typeIconCache[typeKey];
-      // 异步准备图标（未完成前回退默认）
+      final typeKey = mainTypeKey(p.types);
+      final custom = typeIconCache.value[typeKey];
       if (custom == null) {
-        // 不阻塞 UI，生成后刷新
-        unawaited(_ensureIconBuilt(typeKey));
+        unawaited(ensureIconBuilt(typeKey));
       }
       markers.add(Marker(
         markerId: MarkerId('search_${p.id}'),
@@ -286,9 +240,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         infoWindow: InfoWindow(title: p.name),
         icon: (selected?.placeId == p.id)
             ? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen)
-            : (custom ??
-                BitmapDescriptor.defaultMarkerWithHue(
-                    BitmapDescriptor.hueRose)),
+            : (custom ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
         onTap: () async {
           ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
             placeId: p.id,
@@ -296,18 +248,10 @@ class _MapPageState extends ConsumerState<MapPage> {
             point: model.LatLngPoint(p.location.lat, p.location.lng),
           );
           ref.read(panelPageProvider.notifier).state = PanelPage.detail;
-          // 面板移动到 60% 中档位置
-          await _sheetController.animateTo(
-            0.6,
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOutCubic,
-          );
-          // 立即相机聚焦并放大（面板感知中心），显示信息窗
+          await sheetController.animateTo(0.6, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
           final c = ref.read(mapControllerProvider);
           if (c != null) {
-            await _focusPlacePanelAware(
-                model.LatLngPoint(p.location.lat, p.location.lng),
-                zoom: 16);
+            await focusPlacePanelAware(model.LatLngPoint(p.location.lat, p.location.lng), zoom: 16);
             c.showMarkerInfoWindow(MarkerId('search_${p.id}'));
           }
         },
@@ -323,37 +267,28 @@ class _MapPageState extends ConsumerState<MapPage> {
               children: [
                 Icon(Icons.map, color: Colors.white70, size: 48),
                 SizedBox(height: 12),
-                Text(
-                  '当前设备不支持谷歌服务，已切换高德地图（占位）',
-                  style: TextStyle(color: Colors.white70),
-                  textAlign: TextAlign.center,
-                ),
+                Text('当前设备不支持谷歌服务，已切换高德地图（占位）', style: TextStyle(color: Colors.white70), textAlign: TextAlign.center),
                 SizedBox(height: 8),
-                Text(
-                  '请稍后在配置中补充高德 API Key 后启用真实地图渲染',
-                  style: TextStyle(color: Colors.white38, fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
+                Text('请稍后在配置中补充高德 API Key 后启用真实地图渲染', style: TextStyle(color: Colors.white38, fontSize: 12), textAlign: TextAlign.center),
               ],
             ),
           )
         : GoogleMap(
             buildingsEnabled: true,
             indoorViewEnabled: true,
-            initialCameraPosition: _initialPosition,
+            initialCameraPosition: initialPosition,
             myLocationButtonEnabled: true,
             myLocationEnabled: false,
             zoomControlsEnabled: false,
-            style: _mapStyleDefault,
+            style: mapStyleDefault,
             markers: markers,
             polylines: polylines,
             onMapCreated: (controller) {
               ref.read(mapControllerProvider.notifier).state = controller;
-              // 初始化可见区域
               Future.delayed(const Duration(milliseconds: 50), () async {
                 try {
                   final bounds = await controller.getVisibleRegion();
-                  if (mounted) {
+                  if (context.mounted) {
                     ref.read(visibleRegionProvider.notifier).state = bounds;
                   }
                 } catch (_) {}
@@ -370,15 +305,14 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ref.read(visibleRegionProvider.notifier).state = bounds;
                 } catch (_) {}
               }
-              // 相机空闲后刷新附近 Places（用于 Marker 展示）
-              await _refreshOverlayPlaces();
+              await refreshOverlayPlaces();
             },
             onTap: (latLng) async {
-              // 清空选中，关闭 InfoWindow
               ref.read(selectedPlaceProvider.notifier).state = null;
             },
-            onLongPress: _onLongPress,
+            onLongPress: onLongPress,
           );
+
     return Scaffold(
       body: Stack(
         children: [
@@ -392,29 +326,21 @@ class _MapPageState extends ConsumerState<MapPage> {
                 foregroundColor: Colors.black87,
                 shadowColor: Colors.transparent,
                 elevation: 2,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              onPressed: () => _fitToNodes(),
+              onPressed: () => fitToNodes(),
               icon: const Icon(Icons.center_focus_strong),
               label: const Text('适配视野'),
             ).glassy(
               borderRadius: 12,
-              // glassContainsChild: true,
-              settings: const LiquidGlassSettings(
-                blur: 1,
-              ),
+              settings: const LiquidGlassSettings(blur: 1),
             ),
           ),
-          // 覆盖层控制按钮移除
-          TimelinePanel(controller: _sheetController),
+          TimelinePanel(controller: sheetController),
           if (planAsync.isLoading)
             const Positioned.fill(
-              child: IgnorePointer(
-                child: Center(child: CircularProgressIndicator()),
-              ),
+              child: IgnorePointer(child: Center(child: CircularProgressIndicator())),
             ),
         ],
       ),
