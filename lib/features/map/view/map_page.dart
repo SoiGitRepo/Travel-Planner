@@ -35,8 +35,10 @@ class _MapPageState extends ConsumerState<MapPage> {
     zoom: 12,
   );
 
-  // 默认使用 Google 样式（不再隐藏 POI 图层）
-  static const _mapStyleDefault = '[]';
+  //  Google Map样式（隐藏 POI 图层）
+  //
+  static const _mapStyleDefault =
+      '[{"featureType":"poi","elementType":"labels","stylers":[{"visibility":"off"}]}]';
 
   // 自定义图标缓存（按主类型）
   final Map<String, BitmapDescriptor> _typeIconCache = {};
@@ -75,10 +77,12 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   Future<void> _ensureIconBuilt(String key) async {
-    if (_typeIconCache.containsKey(key) || _pendingIconKeys.contains(key)) return;
+    if (_typeIconCache.containsKey(key) || _pendingIconKeys.contains(key))
+      return;
     _pendingIconKeys.add(key);
     final (iconData, bg) = _iconForType(key);
-    final bmp = await MarkerIconFactory.create(icon: iconData, background: bg, foreground: Colors.white, size: 112);
+    final bmp = await MarkerIconFactory.create(
+        icon: iconData, background: bg, foreground: Colors.white, size: 112);
     _typeIconCache[key] = bmp;
     _pendingIconKeys.remove(key);
     if (mounted) setState(() {});
@@ -129,8 +133,10 @@ class _MapPageState extends ConsumerState<MapPage> {
       (bounds.southwest.latitude + bounds.northeast.latitude) / 2,
       (bounds.southwest.longitude + bounds.northeast.longitude) / 2,
     );
-    final r1 = haversine(center.latitude, center.longitude, bounds.northeast.latitude, bounds.northeast.longitude);
-    final r2 = haversine(center.latitude, center.longitude, bounds.southwest.latitude, bounds.southwest.longitude);
+    final r1 = haversine(center.latitude, center.longitude,
+        bounds.northeast.latitude, bounds.northeast.longitude);
+    final r2 = haversine(center.latitude, center.longitude,
+        bounds.southwest.latitude, bounds.southwest.longitude);
     final radius = (0.5 * (r1 + r2)).clamp(100.0, 2500.0).toInt();
 
     // 按缩放控制预期数量上限
@@ -152,7 +158,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     final last = ref.read(overlayRefreshStateProvider);
     final now = DateTime.now();
     if (last != null) {
-      final moved = haversine(center.latitude, center.longitude, last.center.latitude, last.center.longitude);
+      final moved = haversine(center.latitude, center.longitude,
+          last.center.latitude, last.center.longitude);
       final zoomDelta = (z - last.zoom).abs();
       final sinceMs = now.difference(last.at).inMilliseconds;
       if (sinceMs < 1200 && moved < (radius * 0.15) && zoomDelta < 0.25) {
@@ -169,6 +176,7 @@ class _MapPageState extends ConsumerState<MapPage> {
       final rBucket = ((r / 100).round() * 100);
       return 'z:$zBucket;lat:$qLat;lng:$qLng;r:$rBucket';
     }
+
     final cache = ref.read(overlayCacheProvider);
     final key = _keyFor(center.latitude, center.longitude, z, radius);
     final hit = cache[key];
@@ -176,7 +184,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (hit != null && now.difference(hit.at) < ttl) {
       ref.read(overlayPlacesProvider.notifier).state = hit.items;
       // 更新刷新状态，但不触发网络
-      ref.read(overlayRefreshStateProvider.notifier).state = OverlayRefreshState(center: center, zoom: z, at: now);
+      ref.read(overlayRefreshStateProvider.notifier).state =
+          OverlayRefreshState(center: center, zoom: z, at: now);
       return;
     }
 
@@ -203,22 +212,27 @@ class _MapPageState extends ConsumerState<MapPage> {
       }
       return w;
     }
+
     double _scoreFor(a) {
-      final d = haversine(center.latitude, center.longitude, a.location.lat, a.location.lng);
+      final d = haversine(
+          center.latitude, center.longitude, a.location.lat, a.location.lng);
       final rating = (a.rating ?? 0.0).clamp(0.0, 5.0);
       final urt = (a.userRatingsTotal ?? 0);
       final typeW = _typeWeight(a.types);
-      final pop = rating * 2.0 + (urt > 0 ? (1.0 * (urt.toDouble()).clamp(0, 5000) / 5000.0) : 0.0);
+      final pop = rating * 2.0 +
+          (urt > 0 ? (1.0 * (urt.toDouble()).clamp(0, 5000) / 5000.0) : 0.0);
       final distPenalty = (d / (radius.toDouble() + 1)).clamp(0.0, 1.0);
       return pop + typeW - distPenalty; // 值越大越靠前
     }
+
     items.sort((a, b) => _scoreFor(b).compareTo(_scoreFor(a)));
     final trimmed = items.take(maxCount * 2).toList(growable: false);
     ref.read(overlayPlacesProvider.notifier).state = trimmed;
     // 写入缓存与刷新状态
     final newCache = {...cache, key: OverlayCacheEntry(trimmed, now)};
     ref.read(overlayCacheProvider.notifier).state = newCache;
-    ref.read(overlayRefreshStateProvider.notifier).state = OverlayRefreshState(center: center, zoom: z, at: now);
+    ref.read(overlayRefreshStateProvider.notifier).state =
+        OverlayRefreshState(center: center, zoom: z, at: now);
   }
 
   // 不再进行像素布局：覆盖层已移除
@@ -379,12 +393,19 @@ class _MapPageState extends ConsumerState<MapPage> {
               point: n.point,
             );
             ref.read(panelPageProvider.notifier).state = PanelPage.detail;
+            // 面板移动至 60%
+            unawaited(_sheetController.animateTo(
+              0.6,
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+            ));
             // 立即相机聚焦并放大，高亮并显示信息窗
             final c = ref.read(mapControllerProvider);
             if (c != null) {
               unawaited(c.animateCamera(
                 CameraUpdate.newCameraPosition(
-                  CameraPosition(target: LatLng(n.point.lat, n.point.lng), zoom: 16),
+                  CameraPosition(
+                      target: LatLng(n.point.lat, n.point.lng), zoom: 16),
                 ),
               ));
               // 尝试显示信息窗
@@ -410,70 +431,42 @@ class _MapPageState extends ConsumerState<MapPage> {
 
     // 附近 Place（通过 Places API 获取）标记
     final nearbyPlaces = ref.watch(overlayPlacesProvider);
-    for (final p in nearbyPlaces) {
-      final typeKey = _mainTypeKey(p.types);
-      final custom = _typeIconCache[typeKey];
-      if (custom == null) {
-        unawaited(_ensureIconBuilt(typeKey));
-      }
-      markers.add(Marker(
-        markerId: MarkerId('nearby_${p.id}'),
-        position: LatLng(p.location.lat, p.location.lng),
-        infoWindow: InfoWindow(title: p.name),
-        icon: (custom ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
-        onTap: () {
-          ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
-            placeId: p.id,
-            title: p.name,
-            point: model.LatLngPoint(p.location.lat, p.location.lng),
-          );
-          ref.read(panelPageProvider.notifier).state = PanelPage.detail;
-          final c = ref.read(mapControllerProvider);
-          if (c != null) {
-            unawaited(c.animateCamera(
-              CameraUpdate.newCameraPosition(
-                CameraPosition(target: LatLng(p.location.lat, p.location.lng), zoom: 16),
-              ),
-            ));
-            unawaited(Future.delayed(const Duration(milliseconds: 50), () {
-              c.showMarkerInfoWindow(MarkerId('nearby_${p.id}'));
-            }));
-          }
-        },
-      ));
-    }
-
     // 搜索结果标记
     for (final p in searchResults) {
       final typeKey = _mainTypeKey(p.types);
       final custom = _typeIconCache[typeKey];
-      // 异步准备图标（未完成前回退默认）
       if (custom == null) {
-        // 不阻塞 UI，生成后刷新
         unawaited(_ensureIconBuilt(typeKey));
       }
-      markers.add(Marker(
-        markerId: MarkerId('search_${p.id}'),
-        position: LatLng(p.location.lat, p.location.lng),
-        infoWindow: InfoWindow(title: p.name),
-        icon: (selected?.placeId == p.id)
-            ? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen)
-            : (custom ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
-        onTap: () {
-          ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
-            placeId: p.id,
-            title: p.name,
-            point: model.LatLngPoint(p.location.lat, p.location.lng),
-          );
-          ref.read(panelPageProvider.notifier).state = PanelPage.detail;
-          // 立即相机聚焦并放大，显示信息窗
-          final c = ref.read(mapControllerProvider);
-          if (c != null) {
-            unawaited(c.animateCamera(
-              CameraUpdate.newCameraPosition(
-                CameraPosition(target: LatLng(p.location.lat, p.location.lng), zoom: 16),
-              ),
+      markers.add(
+        Marker(
+          markerId: MarkerId('search_${p.id}'),
+          position: LatLng(p.location.lat, p.location.lng),
+          infoWindow: InfoWindow(title: p.name),
+          icon: (selected?.placeId == p.id)
+              ? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen)
+              : (custom ??
+                BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose)),
+          onTap: () {
+            ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
+              placeId: p.id,
+              title: p.name,
+              point: model.LatLngPoint(p.location.lat, p.location.lng),
+            );
+            ref.read(panelPageProvider.notifier).state = PanelPage.detail;
+            // 面板移动至 60%
+            unawaited(_sheetController.animateTo(
+              0.6,
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
             ));
+            // 立即相机聚焦并放大，显示信息窗
+            final c = ref.read(mapControllerProvider);
+            if (c != null) {
+              unawaited(c.animateCamera(
+                CameraUpdate.newCameraPosition(
+                  CameraPosition(
+                      target: LatLng(p.location.lat, p.location.lng), zoom: 16),
             unawaited(Future.delayed(const Duration(milliseconds: 50), () {
               c.showMarkerInfoWindow(MarkerId('search_${p.id}'));
             }));
@@ -506,10 +499,13 @@ class _MapPageState extends ConsumerState<MapPage> {
             ),
           )
         : GoogleMap(
+            buildingsEnabled: true,
+            indoorViewEnabled: true,
             initialCameraPosition: _initialPosition,
             myLocationButtonEnabled: true,
             myLocationEnabled: false,
             zoomControlsEnabled: false,
+            style: _mapStyleDefault,
             markers: markers,
             polylines: polylines,
             onMapCreated: (controller) {
@@ -563,8 +559,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                 foregroundColor: Colors.black87,
                 shadowColor: Colors.transparent,
                 elevation: 2,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
               onPressed: () => _fitToNodes(context),
               icon: const Icon(Icons.center_focus_strong),

@@ -133,10 +133,13 @@ class PlaceDetailPanel extends ConsumerWidget {
                   error: (_, __) => Text('加载详情失败', style: Theme.of(context).textTheme.bodySmall),
                 ),
               const SizedBox(height: 12),
+              const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
+                runSpacing: 8,
                 children: [
-                  ElevatedButton.icon(
+                  // 在地图上查看按钮（始终显示）
+                  OutlinedButton.icon(
                     onPressed: () async {
                       final controller = ref.read(mapControllerProvider);
                       if (controller != null) {
@@ -149,36 +152,39 @@ class PlaceDetailPanel extends ConsumerWidget {
                           ),
                         );
                       }
-                      // 只聚焦不改变页面
                     },
-                    icon: const Icon(Icons.center_focus_strong),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.map, size: 18),
                     label: const Text('在地图上查看'),
                   ),
-                  if (inPlan)
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                      onPressed: () async {
+                  
+                  // 加入/移除计划按钮
+                  FilledButton.icon(
+                    onPressed: () async {
+                      if (inPlan) {
+                        // 从计划中移除
                         await ref.read(planControllerProvider.notifier).deleteNode(selected.nodeId!);
                         ref.read(selectedPlaceProvider.notifier).state = null;
                         ref.read(panelPageProvider.notifier).state = PanelPage.timeline;
-                      },
-                      icon: const Icon(Icons.delete),
-                      label: const Text('从计划中移除'),
-                    )
-                  else
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        // 加入计划并适配相机到合适视图
+                      } else {
+                        // 加入计划
                         await ref.read(planControllerProvider.notifier).addNodeAt(
                               selected.point,
                               title: selected.title,
                               mode: ref.read(transportModeProvider),
                             );
+                            
                         final controller = ref.read(mapControllerProvider);
                         final currentPage = ref.read(panelPageProvider);
+                        
                         if (controller != null) {
                           if (currentPage == PanelPage.timeline) {
-                            // 仅时间轴页才适配整计划
+                            // 时间轴页：适配整个计划
                             final planAsync = ref.read(planControllerProvider);
                             if (planAsync.hasValue) {
                               await FitUtils.fitPlan(
@@ -200,20 +206,31 @@ class PlaceDetailPanel extends ConsumerWidget {
                             );
                           }
                         }
+                        
                         // 高亮新加入的节点（通常是最后一个）
                         final plan = ref.read(planControllerProvider).valueOrNull?.currentPlan;
                         if (plan != null && plan.nodes.isNotEmpty) {
                           final last = plan.nodes.last;
                           ref.read(selectedPlaceProvider.notifier).state = SelectedPlace(
                             nodeId: last.id,
+                            placeId: selected.placeId, // 保留原始 placeId 以保持地址信息
                             title: last.title,
                             point: last.point,
                           );
                         }
-                      },
-                      icon: const Icon(Icons.add_location_alt),
-                      label: const Text('加入计划'),
+                      }
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: inPlan ? Colors.red.shade100 : Theme.of(context).colorScheme.primary,
+                      foregroundColor: inPlan ? Colors.red : Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
+                    icon: Icon(inPlan ? Icons.remove_circle_outline : Icons.add_location_alt, size: 18),
+                    label: Text(inPlan ? '从计划中移除' : '加入计划'),
+                  ),
                 ],
               ),
             ],
