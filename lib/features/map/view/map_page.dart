@@ -209,8 +209,8 @@ class _MapPageState extends ConsumerState<MapPage> {
       return;
     }
 
-    final ps = ref.read(placesServiceProvider);
-    final items = await ps.searchNearby(
+    final repo = ref.read(placesRepositoryProvider);
+    final items = await repo.searchNearby(
       model.LatLngPoint(center.latitude, center.longitude),
       radiusMeters: radius,
     );
