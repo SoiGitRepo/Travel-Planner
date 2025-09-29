@@ -57,7 +57,7 @@ class OverlayController {
     }
 
     // 缓存优先：按量化中心/缩放/半径 生成 key
-    String _keyFor(double lat, double lng, double zoom, int r) {
+    String keyFor(double lat, double lng, double zoom, int r) {
       final qLat = lat.toStringAsFixed(3);
       final qLng = lng.toStringAsFixed(3);
       final zBucket = zoom.floor();
@@ -66,7 +66,7 @@ class OverlayController {
     }
 
     final cache = ref.read(overlayCacheProvider);
-    final key = _keyFor(center.latitude, center.longitude, z, radius);
+    final key = keyFor(center.latitude, center.longitude, z, radius);
     final hit = cache[key];
     const ttl = Duration(seconds: 30);
     if (hit != null && now.difference(hit.at) < ttl) {
@@ -83,7 +83,7 @@ class OverlayController {
     );
 
     // 综合排序（与原逻辑一致）
-    double _typeWeight(List<String> types) {
+    double typeWeight(List<String> types) {
       const weights = {
         'tourist_attraction': 1.0,
         'point_of_interest': 0.6,
@@ -101,17 +101,17 @@ class OverlayController {
       return w;
     }
 
-    double _scoreFor(dynamic a) {
+    double scoreFor(dynamic a) {
       final d = haversine(center.latitude, center.longitude, a.location.lat, a.location.lng);
       final rating = (a.rating ?? 0.0).clamp(0.0, 5.0);
       final urt = (a.userRatingsTotal ?? 0);
-      final typeW = _typeWeight(a.types);
+      final typeW = typeWeight(a.types);
       final pop = rating * 2.0 + (urt > 0 ? (1.0 * (urt.toDouble()).clamp(0, 5000) / 5000.0) : 0.0);
       final distPenalty = (d / (radius.toDouble() + 1)).clamp(0.0, 1.0);
       return pop + typeW - distPenalty;
     }
 
-    items.sort((a, b) => _scoreFor(b).compareTo(_scoreFor(a)));
+    items.sort((a, b) => scoreFor(b).compareTo(scoreFor(a)));
     final trimmed = items.take(maxCount * 2).toList(growable: false);
     ref.read(overlayPlacesProvider.notifier).state = trimmed;
 

@@ -84,8 +84,9 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   Future<void> _ensureIconBuilt(String key) async {
-    if (_typeIconCache.containsKey(key) || _pendingIconKeys.contains(key))
+    if (_typeIconCache.containsKey(key) || _pendingIconKeys.contains(key)) {
       return;
+    }
     _pendingIconKeys.add(key);
     final (iconData, bg) = _iconForType(key);
     final bmp = await MarkerIconFactory.create(
@@ -118,7 +119,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             nearSnap || delta > 0.08 || since.inMilliseconds > 320;
         // 仅在时间轴页面自动适配整计划
         if (ref.read(panelPageProvider) == PanelPage.timeline) {
-          _fitToNodes(context, animate: shouldAnimate);
+          _fitToNodes(animate: shouldAnimate);
         }
         if (shouldAnimate) {
           _lastAnimateAt = now;
@@ -129,7 +130,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   // 根据相机状态与可见范围刷新附近 places（用于 Marker 展示）
-  Future<void> _refreshOverlayPlaces(BuildContext context) async {
+  Future<void> _refreshOverlayPlaces() async {
     await ref.read(overlayControllerProvider).refreshFromCurrentView();
   }
 
@@ -157,7 +158,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
   }
 
-  Future<void> _fitToNodes(BuildContext context, {bool animate = true}) async {
+  Future<void> _fitToNodes({bool animate = true}) async {
     await ref.read(cameraUsecaseProvider).fitToNodes(animate: animate);
   }
 
@@ -168,7 +169,7 @@ class _MapPageState extends ConsumerState<MapPage> {
         mode: mode);
     // 仅时间轴页自动适配整计划
     if (ref.read(panelPageProvider) == PanelPage.timeline) {
-      unawaited(_fitToNodes(context));
+      unawaited(_fitToNodes());
     }
   }
 
@@ -376,7 +377,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 } catch (_) {}
               }
               // 相机空闲后刷新附近 Places（用于 Marker 展示）
-              await _refreshOverlayPlaces(context);
+              await _refreshOverlayPlaces();
             },
             onTap: (latLng) async {
               // 清空选中，关闭 InfoWindow
@@ -402,7 +403,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
               ),
-              onPressed: () => _fitToNodes(context),
+              onPressed: () => _fitToNodes(),
               icon: const Icon(Icons.center_focus_strong),
               label: const Text('适配视野'),
             ).glassy(
