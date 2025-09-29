@@ -1,52 +1,41 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/latlng_point.dart' as model;
 import '../../core/providers.dart';
 import '../plan/presentation/plan_controller.dart';
 
-class SearchPage extends ConsumerStatefulWidget {
+class SearchPage extends HookConsumerWidget {
   const SearchPage({super.key});
 
   @override
-  ConsumerState<SearchPage> createState() => _SearchPageState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final controller = useTextEditingController();
+    final loading = useState(false);
+    final results = useState<List<_ResultItem>>([]);
 
-class _SearchPageState extends ConsumerState<SearchPage> {
-  final _controller = TextEditingController();
-  bool _loading = false;
-  List<_ResultItem> _results = const [];
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _doSearch() async {
-    final q = _controller.text.trim();
-    if (q.isEmpty) return;
-    setState(() => _loading = true);
-    try {
-      final repo = ref.read(placesRepositoryProvider);
-      // 尝试使用当前计划的最后一个节点作为 "near"
-      final planAsync = ref.read(planControllerProvider);
-      model.LatLngPoint? near;
-      if (planAsync.hasValue && planAsync.value!.currentPlan.nodes.isNotEmpty) {
-        near = planAsync.value!.currentPlan.nodes.last.point;
+    Future<void> doSearch() async {
+      final q = controller.text.trim();
+      if (q.isEmpty) return;
+      loading.value = true;
+      try {
+        final repo = ref.read(placesRepositoryProvider);
+        final planAsync = ref.read(planControllerProvider);
+        model.LatLngPoint? near;
+        if (planAsync.hasValue && planAsync.value!.currentPlan.nodes.isNotEmpty) {
+          near = planAsync.value!.currentPlan.nodes.last.point;
+        }
+        final list = await repo.searchText(q, near: near);
+        results.value = list
+            .map((e) => _ResultItem(name: e.name, address: e.address, point: e.location))
+            .toList();
+      } finally {
+        if (context.mounted) loading.value = false;
       }
-      final list = await repo.searchText(q, near: near);
-      setState(() {
-        _results = list.map((e) => _ResultItem(name: e.name, address: e.address, point: e.location)).toList();
-      });
-    } finally {
-      if (mounted) setState(() => _loading = false);
     }
-  }
 
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('搜索地点'),
@@ -66,32 +55,32 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               children: [
                 Expanded(
                   child: TextField(
-                    controller: _controller,
+                    controller: controller,
                     decoration: const InputDecoration(
                       hintText: '输入关键字，例如 "美食"、"酒店"、"博物馆"',
                       border: OutlineInputBorder(),
                     ),
-                    onSubmitted: (_) => _doSearch(),
+                    onSubmitted: (_) => doSearch(),
                   ),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
-                  onPressed: _loading ? null : _doSearch,
+                  onPressed: loading.value ? null : doSearch,
                   icon: const Icon(Icons.search),
                   label: const Text('搜索'),
                 ),
               ],
             ),
           ),
-          if (_loading) const LinearProgressIndicator(minHeight: 2),
+          if (loading.value) const LinearProgressIndicator(minHeight: 2),
           Expanded(
-            child: _results.isEmpty
+            child: results.value.isEmpty
                 ? const Center(child: Text('输入关键字开始搜索'))
                 : ListView.separated(
-                    itemCount: _results.length,
+                    itemCount: results.value.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (ctx, i) {
-                      final it = _results[i];
+                      final it = results.value[i];
                       return ListTile(
                         leading: const Icon(Icons.place_outlined),
                         title: Text(it.name),
@@ -102,7 +91,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                   it.point,
                                   title: it.name,
                                 );
-                            if (mounted) context.pop();
+                            if (context.mounted) context.pop();
                           },
                           icon: const Icon(Icons.add_location_alt),
                           label: const Text('加入计划'),
