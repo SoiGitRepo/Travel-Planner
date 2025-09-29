@@ -36,7 +36,7 @@ class PlacesRemoteDataSource {
       final data = resp.data as Map<String, dynamic>;
       final results = (data['results'] as List?) ?? const [];
       return results.map((e) {
-        final m = e as Map<String, dynamic>;
+        final m = (e as Map).cast<String, dynamic>();
         final id = (m['place_id'] as String?) ?? '';
         final name = (m['name'] as String?) ?? '未命名';
         final addr = m['formatted_address'] as String?;
@@ -86,7 +86,7 @@ class PlacesRemoteDataSource {
       final data = resp.data as Map<String, dynamic>;
       final results = (data['results'] as List?) ?? const [];
       return results.map((e) {
-        final m = e as Map<String, dynamic>;
+        final m = (e as Map).cast<String, dynamic>();
         final id = (m['place_id'] as String?) ?? '';
         final name = (m['name'] as String?) ?? '未命名';
         final addr = m['vicinity'] as String?;
@@ -167,7 +167,6 @@ class PlacesRemoteDataSource {
               .toList(growable: false) ??
           const [];
 
-      // Places Photo URL 构建（延用官方服务 URL）
       final photos = ((result['photos'] as List?) ?? const []).cast<Map<String, dynamic>>();
       final photoUrls = <String>[];
       for (final p in photos) {
