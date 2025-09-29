@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,12 +9,12 @@ import 'package:google_api_availability/google_api_availability.dart';
 // import 'package:go_router/go_router.dart';
 
 import '../../../core/models/latlng_point.dart' as model;
-import '../../../core/providers.dart';
-import '../../../core/utils/haversine.dart';
 import '../../plan/presentation/plan_controller.dart';
 import 'providers.dart';
 import 'timeline_panel.dart';
 import 'marker_icons.dart';
+import '../application/overlay_controller.dart';
+import '../application/camera_usecases.dart';
 
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
@@ -58,21 +57,9 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   Future<void> _focusPlacePanelAware(model.LatLngPoint p,
       {double zoom = 16, bool animate = true}) async {
-    final c = ref.read(mapControllerProvider);
-    if (c == null) return;
-    final fraction = ref.read(sheetFractionProvider).clamp(0.0, 0.95);
-    // 基于目标 zoom 估算纬度跨度，以确保平移距离与最终视野匹配
-    final latSpan = 360 / pow(2, zoom);
-    // 将目标点置于可见区域的垂直中心，相机中心需下移 fraction/2 的屏幕高度
-    final shiftLat = latSpan * (fraction / 2.0);
-    final center = LatLng(p.lat - shiftLat, p.lng);
-    final update = CameraUpdate.newCameraPosition(
-        CameraPosition(target: center, zoom: zoom));
-    if (animate) {
-      await c.animateCamera(update);
-    } else {
-      await c.moveCamera(update);
-    }
+    await ref
+        .read(cameraUsecaseProvider)
+        .focusPlacePanelAware(p, zoom: zoom, animate: animate);
   }
 
   (IconData, Color) _iconForType(String key) {
@@ -143,116 +130,7 @@ class _MapPageState extends ConsumerState<MapPage> {
 
   // 根据相机状态与可见范围刷新附近 places（用于 Marker 展示）
   Future<void> _refreshOverlayPlaces(BuildContext context) async {
-    final c = ref.read(mapControllerProvider);
-    if (c == null) return;
-    final bounds = ref.read(visibleRegionProvider);
-    final pos = ref.read(cameraPositionProvider);
-    if (bounds == null) return;
-
-    final center = LatLng(
-      (bounds.southwest.latitude + bounds.northeast.latitude) / 2,
-      (bounds.southwest.longitude + bounds.northeast.longitude) / 2,
-    );
-    final r1 = haversine(center.latitude, center.longitude,
-        bounds.northeast.latitude, bounds.northeast.longitude);
-    final r2 = haversine(center.latitude, center.longitude,
-        bounds.southwest.latitude, bounds.southwest.longitude);
-    final radius = (0.5 * (r1 + r2)).clamp(100.0, 2500.0).toInt();
-
-    // 按缩放控制预期数量上限
-    final z = pos?.zoom ?? 14.0;
-    int maxCount;
-    if (z < 11) {
-      maxCount = 20;
-    } else if (z < 13) {
-      maxCount = 30;
-    } else if (z < 15) {
-      maxCount = 45;
-    } else if (z < 17) {
-      maxCount = 60;
-    } else {
-      maxCount = 80;
-    }
-
-    // 节流：小幅移动或缩放微调且在短时间内，不触发请求（直接复用已有 overlayPlaces）
-    final last = ref.read(overlayRefreshStateProvider);
-    final now = DateTime.now();
-    if (last != null) {
-      final moved = haversine(center.latitude, center.longitude,
-          last.center.latitude, last.center.longitude);
-      final zoomDelta = (z - last.zoom).abs();
-      final sinceMs = now.difference(last.at).inMilliseconds;
-      if (sinceMs < 1200 && moved < (radius * 0.15) && zoomDelta < 0.25) {
-        // 距离移动很小 + 缩放变化很小 + 时间很短：跳过网络请求
-        return;
-      }
-    }
-
-    // 缓存优先：按量化中心/缩放/半径 生成 key
-    String _keyFor(double lat, double lng, double zoom, int r) {
-      final qLat = lat.toStringAsFixed(3);
-      final qLng = lng.toStringAsFixed(3);
-      final zBucket = zoom.floor();
-      final rBucket = ((r / 100).round() * 100);
-      return 'z:$zBucket;lat:$qLat;lng:$qLng;r:$rBucket';
-    }
-
-    final cache = ref.read(overlayCacheProvider);
-    final key = _keyFor(center.latitude, center.longitude, z, radius);
-    final hit = cache[key];
-    const ttl = Duration(seconds: 30);
-    if (hit != null && now.difference(hit.at) < ttl) {
-      ref.read(overlayPlacesProvider.notifier).state = hit.items;
-      // 更新刷新状态，但不触发网络
-      ref.read(overlayRefreshStateProvider.notifier).state =
-          OverlayRefreshState(center: center, zoom: z, at: now);
-      return;
-    }
-
-    final repo = ref.read(placesRepositoryProvider);
-    final items = await repo.searchNearby(
-      model.LatLngPoint(center.latitude, center.longitude),
-      radiusMeters: radius,
-    );
-    // 综合排序：评分/评价数/类型权重为主，距离为次
-    double _typeWeight(List<String> types) {
-      const weights = {
-        'tourist_attraction': 1.0,
-        'point_of_interest': 0.6,
-        'museum': 0.9,
-        'park': 0.8,
-        'art_gallery': 0.8,
-        'restaurant': 0.6,
-        'cafe': 0.5,
-        'shopping_mall': 0.5,
-      };
-      double w = 0.0;
-      for (final t in types) {
-        w = w < (weights[t] ?? 0.0) ? (weights[t] ?? 0.0) : w;
-      }
-      return w;
-    }
-
-    double _scoreFor(a) {
-      final d = haversine(
-          center.latitude, center.longitude, a.location.lat, a.location.lng);
-      final rating = (a.rating ?? 0.0).clamp(0.0, 5.0);
-      final urt = (a.userRatingsTotal ?? 0);
-      final typeW = _typeWeight(a.types);
-      final pop = rating * 2.0 +
-          (urt > 0 ? (1.0 * (urt.toDouble()).clamp(0, 5000) / 5000.0) : 0.0);
-      final distPenalty = (d / (radius.toDouble() + 1)).clamp(0.0, 1.0);
-      return pop + typeW - distPenalty; // 值越大越靠前
-    }
-
-    items.sort((a, b) => _scoreFor(b).compareTo(_scoreFor(a)));
-    final trimmed = items.take(maxCount * 2).toList(growable: false);
-    ref.read(overlayPlacesProvider.notifier).state = trimmed;
-    // 写入缓存与刷新状态
-    final newCache = {...cache, key: OverlayCacheEntry(trimmed, now)};
-    ref.read(overlayCacheProvider.notifier).state = newCache;
-    ref.read(overlayRefreshStateProvider.notifier).state =
-        OverlayRefreshState(center: center, zoom: z, at: now);
+    await ref.read(overlayControllerProvider).refreshFromCurrentView();
   }
 
   // 不再进行像素布局：覆盖层已移除
@@ -280,95 +158,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   Future<void> _fitToNodes(BuildContext context, {bool animate = true}) async {
-    final controller = ref.read(mapControllerProvider);
-    final planAsync = ref.read(planControllerProvider);
-    if (controller == null || !planAsync.hasValue) return;
-    final plan = planAsync.value!.currentPlan;
-    final nodes = plan.nodes;
-    final segs = plan.segments;
-
-    // 收集所有需要纳入视野的点：节点坐标 + 所有路线折线点
-    final pts = <LatLng>[];
-    for (final n in nodes) {
-      pts.add(LatLng(n.point.lat, n.point.lng));
-    }
-    for (final s in segs) {
-      final path = s.path ?? const [];
-      for (final p in path) {
-        pts.add(LatLng(p.lat, p.lng));
-      }
-    }
-
-    if (pts.isEmpty) {
-      final update = CameraUpdate.newCameraPosition(_initialPosition);
-      if (animate) {
-        await controller.animateCamera(update);
-      } else {
-        await controller.moveCamera(update);
-      }
-      return;
-    }
-    if (pts.length == 1) {
-      final update = CameraUpdate.newCameraPosition(
-          CameraPosition(target: pts.first, zoom: 14));
-      if (animate) {
-        await controller.animateCamera(update);
-      } else {
-        await controller.moveCamera(update);
-      }
-      return;
-    }
-
-    var minLat = pts.first.latitude;
-    var maxLat = pts.first.latitude;
-    var minLng = pts.first.longitude;
-    var maxLng = pts.first.longitude;
-    for (final p in pts) {
-      minLat = p.latitude < minLat ? p.latitude : minLat;
-      maxLat = p.latitude > maxLat ? p.latitude : maxLat;
-      minLng = p.longitude < minLng ? p.longitude : minLng;
-      maxLng = p.longitude > maxLng ? p.longitude : maxLng;
-    }
-
-    // 基于底部面板高度，计算需要的“可见比例”，确保所有点都显示在 (地图高度 - 面板高度) 内；
-    // 做法：按 1/(可见比例) 扩大内容纵向范围，并将中心按面板占比向上偏移。
-    final fraction = ref.read(sheetFractionProvider).clamp(0.0, 0.95);
-    final latSpan = (maxLat - minLat).abs();
-    final safeSpan = latSpan < 1e-5 ? 1e-3 : latSpan; // 防止过小导致过度放大
-    final visibleRatio =
-        (0.85 - fraction).clamp(0.2, 0.9); // 最少给 20% 可见空间，避免无穷放大
-    final expandFactor = 1.0 / visibleRatio;
-    final targetSpan = safeSpan * expandFactor;
-    final grow = targetSpan - safeSpan;
-    // 以“向上扩”为主，下方保留少量余量
-    minLat -= grow * 0.15;
-    maxLat += grow * 0.85;
-    // 根据面板高度，将相机中心向下偏移（使内容在屏幕上整体上移，远离底部遮挡）
-    final shiftLat = targetSpan * (fraction * 0.9); // 0~0.475倍span
-    minLat -= shiftLat;
-    maxLat -= shiftLat;
-
-    final bounds = LatLngBounds(
-      southwest: LatLng(minLat, minLng),
-      northeast: LatLng(maxLat, maxLng),
-    );
-    try {
-      final update = CameraUpdate.newLatLngBounds(bounds, 64);
-      if (animate) {
-        await controller.animateCamera(update);
-      } else {
-        await controller.moveCamera(update);
-      }
-    } catch (_) {
-      // 某些平台在首次渲染或地图尚未布局完成时会抛错，降级为移动中心点
-      final center = LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2);
-      final update = CameraUpdate.newLatLng(center);
-      if (animate) {
-        await controller.animateCamera(update);
-      } else {
-        await controller.moveCamera(update);
-      }
-    }
+    await ref.read(cameraUsecaseProvider).fitToNodes(animate: animate);
   }
 
   Future<void> _onLongPress(LatLng point) async {

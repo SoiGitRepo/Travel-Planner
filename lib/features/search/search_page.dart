@@ -29,14 +29,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     if (q.isEmpty) return;
     setState(() => _loading = true);
     try {
-      final ps = ref.read(placesServiceProvider);
+      final repo = ref.read(placesRepositoryProvider);
       // 尝试使用当前计划的最后一个节点作为 "near"
       final planAsync = ref.read(planControllerProvider);
       model.LatLngPoint? near;
       if (planAsync.hasValue && planAsync.value!.currentPlan.nodes.isNotEmpty) {
         near = planAsync.value!.currentPlan.nodes.last.point;
       }
-      final list = await ps.searchText(q, near: near);
+      final list = await repo.searchText(q, near: near);
       setState(() {
         _results = list.map((e) => _ResultItem(name: e.name, address: e.address, point: e.location)).toList();
       });
