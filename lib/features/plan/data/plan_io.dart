@@ -22,7 +22,7 @@ class PlanIO {
     final jsonStr = await exportToJson(group);
     final dir = await getApplicationDocumentsDirectory();
     final ts = DateTime.now();
-    final name = 'travel_plan_${ts.year}${_2(ts.month)}${_2(ts.day)}_${_2(ts.hour)}${_2(ts.minute)}${_2(ts.second)}.json';
+    final name = 'travel_plan_${ts.year}${twoDigits(ts.month)}${twoDigits(ts.day)}_${twoDigits(ts.hour)}${twoDigits(ts.minute)}${twoDigits(ts.second)}.json';
     final file = File('${dir.path}/$name');
     await file.writeAsString(jsonStr);
     return file.path;
@@ -104,7 +104,7 @@ class PlanIO {
   Node _nodeFromMap(Map<String, dynamic> m) {
     final schedMs = (m['scheduledTime'] as num?)?.toInt();
     // 兼容 point 缺失或类型异常（如为 String、List 等），并稳健解析 lat/lng
-    double _toDouble(dynamic v) {
+    double toDoubleSafe(dynamic v) {
       if (v == null) return 0;
       if (v is num) return v.toDouble();
       if (v is String) {
@@ -117,8 +117,8 @@ class PlanIO {
     double lat = 0;
     double lng = 0;
     if (pointAny is Map) {
-      lat = _toDouble(pointAny['lat']);
-      lng = _toDouble(pointAny['lng']);
+      lat = toDoubleSafe(pointAny['lat']);
+      lng = toDoubleSafe(pointAny['lng']);
     }
     return Node(
       id: (m['id'] as String?) ?? DateTime.now().microsecondsSinceEpoch.toString(),
@@ -151,5 +151,5 @@ class PlanIO {
     );
   }
 
-  String _2(int v) => v.toString().padLeft(2, '0');
+  String twoDigits(int v) => v.toString().padLeft(2, '0');
 }

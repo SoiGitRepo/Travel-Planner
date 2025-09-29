@@ -102,7 +102,7 @@ class TimelinePanel extends ConsumerWidget {
                     const BorderRadius.vertical(top: Radius.circular(16)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
+                    color: Colors.black.withAlpha(20),
                     blurRadius: 12,
                     offset: const Offset(0, -4),
                   ),
@@ -147,7 +147,7 @@ class TimelinePanel extends ConsumerWidget {
                                 borderRadius: BorderRadius.circular(12),
                                 boxShadow: [
                                   BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
+                                      color: Colors.black.withAlpha(13),
                                       blurRadius: 8,
                                       offset: const Offset(0, 2)),
                                 ],
@@ -251,6 +251,9 @@ class TimelinePanel extends ConsumerWidget {
                                     const io = PlanIO();
                                     final path =
                                         await io.saveExportToFile(group);
+                                    if (!context.mounted) {
+                                      break;
+                                    }
                                     final messenger =
                                         ScaffoldMessenger.maybeOf(context);
                                     messenger?.showSnackBar(SnackBar(

@@ -12,7 +12,7 @@ class MarkerIconFactory {
     Color foreground = Colors.white,
     double size = 96, // 像素
   }) async {
-    final key = '${icon.codePoint}_${background.value}_${foreground.value}_${size.toInt()}';
+    final key = '${icon.codePoint}_${background.toARGB32()}_${foreground.toARGB32()}_${size.toInt()}';
     final cached = _cache[key];
     if (cached != null) return cached;
     final fut = _draw(icon: icon, background: background, foreground: foreground, size: size);
@@ -54,6 +54,6 @@ class MarkerIconFactory {
     final picture = recorder.endRecording();
     final img = await picture.toImage(size.toInt(), size.toInt());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 }

@@ -37,9 +37,9 @@ class PlaceDetailPanel extends ConsumerWidget {
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: Colors.orange.withAlpha(26),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.withOpacity(0.4)),
+                    border: Border.all(color: Colors.orange.withAlpha(102)),
                   ),
                   child: const Row(
                     children: [
