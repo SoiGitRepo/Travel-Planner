@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show HandshakeException;
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
@@ -32,15 +33,26 @@ class GoogleRouteService implements RouteService {
 
     final uri = Uri.parse(
         'https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&mode=$modeStr&key=$_apiKey');
-    final resp = await http.get(uri);
-    if (resp.statusCode != 200) {
+    Map<String, dynamic>? data;
+    try {
+      final resp = await http.get(uri).timeout(const Duration(seconds: 8));
+      if (resp.statusCode != 200) {
+        return RouteResult(path: [origin, destination]);
+      }
+      data = json.decode(resp.body) as Map<String, dynamic>;
+    } on HandshakeException {
+      return RouteResult(path: [origin, destination]);
+    } on Exception {
       return RouteResult(path: [origin, destination]);
     }
-    final data = json.decode(resp.body) as Map<String, dynamic>;
-    if ((data['routes'] as List).isEmpty) {
+    final dataNonNull = data;
+    if (dataNonNull == null) {
       return RouteResult(path: [origin, destination]);
     }
-    final route = (data['routes'] as List).first as Map<String, dynamic>;
+    if ((dataNonNull['routes'] as List).isEmpty) {
+      return RouteResult(path: [origin, destination]);
+    }
+    final route = (dataNonNull['routes'] as List).first as Map<String, dynamic>;
     final overview = route['overview_polyline'] as Map<String, dynamic>;
     final pointsStr = overview['points'] as String;
     final polyPoints = PolylinePoints().decodePolyline(pointsStr);
