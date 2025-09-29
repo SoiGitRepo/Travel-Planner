@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -372,12 +373,12 @@ class TimelinePanel extends ConsumerWidget {
                                       await _findSelectedPlaceForNode(n, ref);
                                   ref.read(panelPageProvider.notifier).state =
                                       PanelPage.detail;
-                                  // 将面板移动至 60% 的中档位置
-                                  await controller.animateTo(
+                                  // 面板移动到 60% 中档位置
+                                  unawaited(controller.animateTo(
                                     0.6,
                                     duration: const Duration(milliseconds: 260),
                                     curve: Curves.easeOutCubic,
-                                  );
+                                  ));
                                   final c = ref.read(mapControllerProvider);
                                   if (c != null) {
                                     await c.animateCamera(
