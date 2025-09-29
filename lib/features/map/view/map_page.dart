@@ -35,27 +35,6 @@ class _MapPageState extends ConsumerState<MapPage> {
     zoom: 12,
   );
 
-  // 基于当前面板高度，将目标点放在“可见地图(1-面板高度)”的垂直中线位置（例如面板 60% 时为上部 40% 的中心）
-  CameraPosition _cameraPositionWithPanelOffset({
-    required LatLng target,
-    double zoom = 16,
-  }) {
-    final bounds = ref.read(visibleRegionProvider);
-    final fraction = ref.read(sheetFractionProvider).clamp(0.0, 0.95);
-    if (bounds == null) {
-      return CameraPosition(target: target, zoom: zoom);
-    }
-    final minLat = bounds.southwest.latitude;
-    final maxLat = bounds.northeast.latitude;
-    final spanLat = (maxLat - minLat).abs();
-    if (spanLat <= 1e-7) {
-      return CameraPosition(target: target, zoom: zoom);
-    }
-    // 计算中心应向北偏移的纬度量：spanLat * (fraction/2)
-    final centerLat = target.latitude + spanLat * (fraction / 2.0);
-    return CameraPosition(target: LatLng(centerLat, target.longitude), zoom: zoom);
-  }
-
   //  Google Map样式（隐藏 POI 图层）
   //
   static const _mapStyleDefault =
@@ -74,6 +53,33 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (types.contains('cafe')) return 'cafe';
     if (types.contains('shopping_mall')) return 'shopping_mall';
     return 'default';
+  }
+
+  Future<void> _focusPlacePanelAware(model.LatLngPoint p,
+      {double zoom = 16, bool animate = true}) async {
+    final c = ref.read(mapControllerProvider);
+    if (c == null) return;
+    final fraction = ref.read(sheetFractionProvider).clamp(0.0, 0.95);
+    final bounds = ref.read(visibleRegionProvider);
+    double latSpan;
+    if (bounds != null) {
+      latSpan =
+          (bounds.northeast.latitude - bounds.southwest.latitude).abs();
+      latSpan = latSpan < 1e-5 ? 1e-3 : latSpan;
+    } else {
+      latSpan = 0.05; // 兜底跨度
+    }
+    final visibleRatio = (0.85 - fraction).clamp(0.2, 0.9);
+    final targetSpan = latSpan * (1.0 / visibleRatio);
+    final shiftLat = targetSpan * (fraction * 0.9);
+    final center = LatLng(p.lat - shiftLat, p.lng);
+    final update = CameraUpdate.newCameraPosition(
+        CameraPosition(target: center, zoom: zoom));
+    if (animate) {
+      await c.animateCamera(update);
+    } else {
+      await c.moveCamera(update);
+    }
   }
 
   (IconData, Color) _iconForType(String key) {
@@ -420,16 +426,10 @@ class _MapPageState extends ConsumerState<MapPage> {
               duration: const Duration(milliseconds: 260),
               curve: Curves.easeOutCubic,
             ));
-            // 立即相机聚焦并放大，高亮并显示信息窗
+            // 立即相机聚焦并放大（面板感知中心），高亮并显示信息窗
             final c = ref.read(mapControllerProvider);
             if (c != null) {
-              final pos = _cameraPositionWithPanelOffset(
-                target: LatLng(n.point.lat, n.point.lng),
-                zoom: 16,
-              );
-              unawaited(c.animateCamera(
-                CameraUpdate.newCameraPosition(pos),
-              ));
+              unawaited(_focusPlacePanelAware(n.point, zoom: 16));
               // 尝试显示信息窗
               unawaited(Future.delayed(const Duration(milliseconds: 50), () {
                 c.showMarkerInfoWindow(MarkerId(n.id));
@@ -480,13 +480,9 @@ class _MapPageState extends ConsumerState<MapPage> {
           ));
           final c = ref.read(mapControllerProvider);
           if (c != null) {
-            final pos = _cameraPositionWithPanelOffset(
-              target: LatLng(p.location.lat, p.location.lng),
-              zoom: 16,
-            );
-            unawaited(c.animateCamera(
-              CameraUpdate.newCameraPosition(pos),
-            ));
+            unawaited(_focusPlacePanelAware(
+                model.LatLngPoint(p.location.lat, p.location.lng),
+                zoom: 16));
             unawaited(Future.delayed(const Duration(milliseconds: 50), () {
               c.showMarkerInfoWindow(MarkerId('nearby_${p.id}'));
             }));
@@ -526,16 +522,12 @@ class _MapPageState extends ConsumerState<MapPage> {
             duration: const Duration(milliseconds: 260),
             curve: Curves.easeOutCubic,
           ));
-          // 立即相机聚焦并放大，显示信息窗
+          // 立即相机聚焦并放大（面板感知中心），显示信息窗
           final c = ref.read(mapControllerProvider);
           if (c != null) {
-            final pos = _cameraPositionWithPanelOffset(
-              target: LatLng(p.location.lat, p.location.lng),
-              zoom: 16,
-            );
-            unawaited(c.animateCamera(
-              CameraUpdate.newCameraPosition(pos),
-            ));
+            unawaited(_focusPlacePanelAware(
+                model.LatLngPoint(p.location.lat, p.location.lng),
+                zoom: 16));
             unawaited(Future.delayed(const Duration(milliseconds: 50), () {
               c.showMarkerInfoWindow(MarkerId('search_${p.id}'));
             }));
