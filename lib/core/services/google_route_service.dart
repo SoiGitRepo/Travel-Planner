@@ -33,7 +33,7 @@ class GoogleRouteService implements RouteService {
 
     final uri = Uri.parse(
         'https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&mode=$modeStr&key=$_apiKey');
-    Map<String, dynamic>? data;
+    late Map<String, dynamic> data;
     try {
       final resp = await http.get(uri).timeout(const Duration(seconds: 8));
       if (resp.statusCode != 200) {
@@ -46,9 +46,6 @@ class GoogleRouteService implements RouteService {
       return RouteResult(path: [origin, destination]);
     }
     final dataNonNull = data;
-    if (dataNonNull == null) {
-      return RouteResult(path: [origin, destination]);
-    }
     if ((dataNonNull['routes'] as List).isEmpty) {
       return RouteResult(path: [origin, destination]);
     }

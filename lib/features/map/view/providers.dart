@@ -13,8 +13,6 @@ final transportModeProvider = StateProvider<TransportMode>((ref) => TransportMod
 final sheetFractionProvider = StateProvider<double>((ref) => 0.2);
 // 地图提供方切换：当 Google Play 服务不可用时切换为高德地图
 final useAmapProvider = StateProvider<bool>((ref) => false);
-// 自定义覆盖层特性开关：关闭后不渲染覆盖层且不触发相关刷新/布局
-final overlayEnabledProvider = StateProvider<bool>((ref) => true);
 
 // 底部面板当前页
 enum PanelPage { timeline, search, detail }
@@ -22,31 +20,11 @@ final panelPageProvider = StateProvider<PanelPage>((ref) => PanelPage.timeline);
 
 // 当前地图可见区域（用于限定搜索范围）
 final visibleRegionProvider = StateProvider<LatLngBounds?>((ref) => null);
-// 当前相机位置（用于覆盖层定位与密度控制）
+// 当前相机位置（用于附近 Marker 刷新）
 final cameraPositionProvider = StateProvider<CameraPosition?>((ref) => null);
-// 选中 Place 的屏幕像素位置（用于覆盖层定位）
-class OverlayPos {
-  final double x;
-  final double y;
-  const OverlayPos(this.x, this.y);
-}
-final selectedOverlayPosProvider = StateProvider<OverlayPos?>((ref) => null);
 
-// 密集覆盖层候选 place 列表（按相机缩放/范围动态刷新）
+// 附近 place 列表（按相机缩放/范围动态刷新，用于 Marker 渲染）
 final overlayPlacesProvider = StateProvider<List<PlaceItem>>((ref) => const []);
-
-// 用于渲染的覆盖层条目（已包含像素坐标与碰撞裁剪后的结果）
-class OverlayRenderItem {
-  final PlaceItem place;
-  final OverlayPos pos;
-  const OverlayRenderItem({required this.place, required this.pos});
-}
-final overlayRenderItemsProvider = StateProvider<List<OverlayRenderItem>>((ref) => const []);
-
-// 地图当前相机 target 的屏幕像素坐标（用于计算位移）
-final centerScreenPosProvider = StateProvider<OverlayPos?>((ref) => null);
-// 覆盖层整体位移（相机移动时按像素平移，idle 时重置为 0）
-final overlayShiftProvider = StateProvider<OverlayPos>((ref) => const OverlayPos(0, 0));
 
 // 刷新节流状态（用于判断是否需要重新获取 Nearby）
 class OverlayRefreshState {
