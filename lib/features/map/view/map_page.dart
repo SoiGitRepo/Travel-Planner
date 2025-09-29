@@ -64,9 +64,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     // 基于 zoom 估算纬度跨度，避免依赖受面板遮挡影响的 visibleRegion
     final currentZoom = ref.read(cameraPositionProvider)?.zoom ?? 14.0;
     final latSpan = 360 / pow(2, currentZoom);
-    final visibleRatio = (0.85 - fraction).clamp(0.2, 0.9);
-    final targetSpan = latSpan * (1.0 / visibleRatio);
-    final shiftLat = targetSpan * (fraction * 0.9);
+    // 将目标点置于可见区域的垂直中心，相机中心需下移 fraction/2 的屏幕高度
+    final shiftLat = latSpan * (fraction / 2.0);
     final center = LatLng(p.lat - shiftLat, p.lng);
     final update = CameraUpdate.newCameraPosition(
         CameraPosition(target: center, zoom: zoom));
