@@ -183,7 +183,7 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
         containerView.preservesSuperviewLayoutMargins = false
 
         if #available(iOS 13.0, *) {
-            if #available(iOS 26.0, *) {
+            // if #available(iOS 26.0, *) {
             let model = GlassTapModel()
             self.tapModel = model
             let hosting = UIHostingController(
@@ -263,5 +263,16 @@ class GlassContainerFactory: NSObject, FlutterPlatformViewFactory {
 
     func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
         GlassContainerPlatformView(frame: frame, viewId: viewId, args: args, messenger: messenger)
+    }
+}
+
+// MARK: - Utilities
+extension GlassContainerPlatformView {
+    static func colorFromARGBInt(_ argb: Int64) -> UIColor {
+        let a = CGFloat((argb >> 24) & 0xFF) / 255.0
+        let r = CGFloat((argb >> 16) & 0xFF) / 255.0
+        let g = CGFloat((argb >> 8) & 0xFF) / 255.0
+        let b = CGFloat(argb & 0xFF) / 255.0
+        return UIColor(red: r, green: g, blue: b, alpha: a)
     }
 }

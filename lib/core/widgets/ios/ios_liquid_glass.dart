@@ -74,9 +74,17 @@ class _IOSLiquidGlassContainerState extends State<_IOSLiquidGlassContainer> {
               'rippleMaxDiameter': widget.rippleMaxDiameter,
               'springResponse': widget.springResponse,
               'springDampingFraction': widget.springDampingFraction,
-              if (widget.bgColor != null) 'bgColor': widget.bgColor!.value,
+              if (widget.bgColor != null)
+                'bgColor': (((widget.bgColor!.a * 255.0).round() & 0xFF) << 24) |
+                    (((widget.bgColor!.r * 255.0).round() & 0xFF) << 16) |
+                    (((widget.bgColor!.g * 255.0).round() & 0xFF) << 8) |
+                    ((widget.bgColor!.b * 255.0).round() & 0xFF),
               'bgOpacity': widget.bgOpacity,
-              if (widget.shadowColor != null) 'shadowColor': widget.shadowColor!.value,
+              if (widget.shadowColor != null)
+                'shadowColor': (((widget.shadowColor!.a * 255.0).round() & 0xFF) << 24) |
+                    (((widget.shadowColor!.r * 255.0).round() & 0xFF) << 16) |
+                    (((widget.shadowColor!.g * 255.0).round() & 0xFF) << 8) |
+                    ((widget.shadowColor!.b * 255.0).round() & 0xFF),
               'shadowOpacity': widget.shadowOpacity,
               'shadowRadius': widget.shadowRadius,
               'shadowOffsetX': widget.shadowOffsetX,
