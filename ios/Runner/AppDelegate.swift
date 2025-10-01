@@ -35,33 +35,40 @@ private struct LiquidGlassSwiftUIView: View {
     let interactive: Bool
     @ObservedObject var tapModel: GlassTapModel
 
-    @State private var pressed: Bool = false
+    @State private var isPressed: Bool = false
 
     var body: some View {
         ZStack { Color.clear }
             .background(
                 RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
-                    .fill(.clear)
+                    .fill(.ultraThinMaterial)
                     .modifier(GlassEffectModifier(borderRadius: borderRadius, interactive: interactive))
             )
+            .scaleEffect(isPressed ? 0.95 : 1.0)
             .overlay(
-                // 使用 SwiftUI 动画产生点击反馈（原生层实现）
-                RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
-                    .stroke(.primary.opacity(pressed ? 0.25 : 0.0), lineWidth: 1)
-                    .animation(.easeOut(duration: 0.18), value: pressed)
+                ZStack {
+                    // 液体波纹效果（参考示例）
+                    Circle()
+                        .fill(Color.white.opacity(0.3))
+                        .frame(width: isPressed ? 60 : 0)
+                        .scaleEffect(isPressed ? 1.5 : 0)
+                        .opacity(isPressed ? 1 : 0)
+                        .animation(.easeOut(duration: 0.4), value: isPressed)
+                }
             )
             .onChange(of: tapModel.tapCounter) { _ in
-                // 每次收到 Dart 同步的 tap，触发一次原生 SwiftUI 动画与可选触觉反馈
-                pressed = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    pressed = false
+                // 原生手势触发：使用弹簧动画带来液体般的反馈
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    isPressed = true
                 }
-                if #available(iOS 13.0, *) {
-                    let gen = UIImpactFeedbackGenerator(style: .light)
-                    gen.impactOccurred()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                        isPressed = false
+                    }
                 }
+                let gen = UIImpactFeedbackGenerator(style: .light)
+                gen.impactOccurred()
             }
-            .clipped()
     }
 }
 
@@ -95,7 +102,6 @@ private struct GlassEffectModifier: ViewModifier {
 
 class GlassContainerPlatformView: NSObject, FlutterPlatformView {
     private let containerView: UIView
-    private var channel: FlutterMethodChannel?
     @available(iOS 13.0, *)
     private var tapModel: GlassTapModel?
 
@@ -108,6 +114,7 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
 
         var borderRadius: CGFloat = 20
         var interactive: Bool = true
+        var outerMargin: CGFloat = 12 // 透明外边距，避免动画被裁剪
 
         if let dict = args as? [String: Any] {
             if let br = dict["borderRadius"] as? NSNumber {
@@ -118,7 +125,16 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
             if let inter = dict["interactive"] as? Bool {
                 interactive = inter
             }
+            if let m = dict["outerMargin"] as? NSNumber {
+                outerMargin = max(0, CGFloat(truncating: m))
+            } else if let md = dict["outerMargin"] as? Double {
+                outerMargin = max(0, CGFloat(md))
+            }
         }
+
+        // 通过 layoutMargins 在容器内部留出透明外边距
+        containerView.layoutMargins = UIEdgeInsets(top: outerMargin, left: outerMargin, bottom: outerMargin, right: outerMargin)
+        containerView.preservesSuperviewLayoutMargins = false
 
         if #available(iOS 13.0, *) {
             if #available(iOS 26.0, *) {
@@ -126,24 +142,40 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
                 self.tapModel = model
                 let hosting = UIHostingController(rootView: LiquidGlassSwiftUIView(borderRadius: borderRadius, interactive: interactive, tapModel: model))
                 hosting.view.backgroundColor = .clear
-                hosting.view.frame = containerView.bounds
-                hosting.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                hosting.view.clipsToBounds = false
+                hosting.view.translatesAutoresizingMaskIntoConstraints = false
                 containerView.addSubview(hosting.view)
+                NSLayoutConstraint.activate([
+                    hosting.view.leadingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.leadingAnchor),
+                    hosting.view.trailingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.trailingAnchor),
+                    hosting.view.topAnchor.constraint(equalTo: containerView.layoutMarginsGuide.topAnchor),
+                    hosting.view.bottomAnchor.constraint(equalTo: containerView.layoutMarginsGuide.bottomAnchor)
+                ])
             } else {
                 let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
-                blur.frame = containerView.bounds
-                blur.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                blur.translatesAutoresizingMaskIntoConstraints = false
                 blur.clipsToBounds = true
                 blur.layer.cornerRadius = borderRadius
                 containerView.addSubview(blur)
+                NSLayoutConstraint.activate([
+                    blur.leadingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.leadingAnchor),
+                    blur.trailingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.trailingAnchor),
+                    blur.topAnchor.constraint(equalTo: containerView.layoutMarginsGuide.topAnchor),
+                    blur.bottomAnchor.constraint(equalTo: containerView.layoutMarginsGuide.bottomAnchor)
+                ])
             }
         } else {
             let blur = UIVisualEffectView(effect: UIBlurEffect(style: .light))
-            blur.frame = containerView.bounds
-            blur.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            blur.translatesAutoresizingMaskIntoConstraints = false
             blur.clipsToBounds = true
             blur.layer.cornerRadius = borderRadius
             containerView.addSubview(blur)
+            NSLayoutConstraint.activate([
+                blur.leadingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.leadingAnchor),
+                blur.trailingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.trailingAnchor),
+                blur.topAnchor.constraint(equalTo: containerView.layoutMarginsGuide.topAnchor),
+                blur.bottomAnchor.constraint(equalTo: containerView.layoutMarginsGuide.bottomAnchor)
+            ])
         }
 
         containerView.layer.shadowColor = UIColor.black.cgColor
@@ -151,35 +183,25 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
         containerView.layer.shadowRadius = 10
         containerView.layer.shadowOffset = CGSize(width: 0, height: 4)
 
-        // 建立与 Dart 的 MethodChannel，用于接收 tap 事件
-        let ch = FlutterMethodChannel(name: "GlassContainer/\(viewId)", binaryMessenger: messenger)
-        self.channel = ch
-        ch.setMethodCallHandler { [weak self] call, result in
-            guard let self = self else { result(FlutterError(code: "unavailable", message: "deallocated", details: nil)); return }
-            switch call.method {
-            case "tap":
-                // 解析参数中的类型，默认为 liquid_glass
-                var kind = "liquid_glass"
-                if let args = call.arguments as? [String: Any], let t = args["type"] as? String {
-                    kind = t
-                }
-                if kind == "liquid_glass" {
-                    if #available(iOS 13.0, *) {
-                        DispatchQueue.main.async {
-                            self.tapModel?.tapCounter += 1
-                        }
-                    }
-                    result(nil)
-                } else {
-                    result(FlutterError(code: "invalid_args", message: "Unsupported type: \(kind)", details: nil))
-                }
-            default:
-                result(FlutterMethodNotImplemented)
-            }
-        }
+        // 原生侧点击：添加手势识别，触发原生反馈并回调 Flutter
+        let nativeTap = UITapGestureRecognizer(target: self, action: #selector(handleNativeTap))
+        containerView.addGestureRecognizer(nativeTap)
+        containerView.isUserInteractionEnabled = true
+
+        // 取消与 Flutter 的 MethodChannel 互通：不再建立通道与处理方法。
     }
 
     func view() -> UIView { containerView }
+
+    @objc private func handleNativeTap() {
+        // 原生触发：SwiftUI 动效 & 触觉
+        if #available(iOS 13.0, *) {
+            self.tapModel?.tapCounter += 1
+            let gen = UIImpactFeedbackGenerator(style: .light)
+            gen.impactOccurred()
+        }
+        // 不再回调 Flutter，原生侧只处理自身点击效果
+    }
 }
 
 class GlassContainerFactory: NSObject, FlutterPlatformViewFactory {
