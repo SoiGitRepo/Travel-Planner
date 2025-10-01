@@ -4,9 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
-import 'package:travel_planner/core/widgets/glassy/glassy.dart';
 import 'package:google_api_availability/google_api_availability.dart';
+import 'package:travel_planner/core/widgets/ios/ios_liquid_glass.dart';
 // import 'package:go_router/go_router.dart';
 
 import '../../../core/models/latlng_point.dart' as model;
@@ -391,9 +390,9 @@ class MapPage extends HookConsumerWidget {
               onPressed: () => fitToNodes(),
               icon: const Icon(Icons.center_focus_strong),
               label: const Text('适配视野'),
-            ).glassy(
+            ).iosLiquidGlass(
               borderRadius: 12,
-              settings: const LiquidGlassSettings(blur: 1),
+              padding: const EdgeInsets.all(2),
             ),
           ),
           TimelinePanel(controller: sheetController),
