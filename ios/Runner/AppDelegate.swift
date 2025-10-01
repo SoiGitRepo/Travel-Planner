@@ -48,8 +48,8 @@ private struct LiquidGlassSwiftUIView: View {
     var body: some View {
         ZStack { Color.clear }
             .background(
+                // 由 GlassEffectModifier 统一决定：iOS26 用 glassEffect；低版本用 .ultraThinMaterial 回退
                 RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
                     .modifier(GlassEffectModifier(borderRadius: borderRadius, interactive: interactive))
             )
             .overlay(
@@ -127,6 +127,7 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
 
         containerView.backgroundColor = .clear
         containerView.clipsToBounds = false
+        containerView.isOpaque = false
 
         var borderRadius: CGFloat = 20
         var interactive: Bool = true
@@ -136,7 +137,7 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
         var springResponse: Double = 0.3
         var springDampingFraction: Double = 0.6
         // 阴影与背景（默认值）
-        var shadowColor: UIColor = UIColor.black
+        var shadowColor: UIColor = UIColor.clear
         var shadowOpacity: Float = 0.15
         var shadowRadius: CGFloat = 10
         var shadowOffset = CGSize(width: 0, height: 4)
@@ -200,6 +201,7 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
                 )
             )
             hosting.view.backgroundColor = .clear
+            hosting.view.isOpaque = false
             hosting.view.clipsToBounds = false
             hosting.view.translatesAutoresizingMaskIntoConstraints = false
             containerView.addSubview(hosting.view)
