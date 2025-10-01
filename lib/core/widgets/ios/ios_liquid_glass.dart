@@ -13,6 +13,12 @@ extension IOSLiquidGlassX on Widget {
   }) {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       final content = padding != null ? Padding(padding: padding, child: this) : this;
+      // 按要求：在 iOS 上无论内容层级如何，触摸事件都传递给原生 Liquid Glass。
+      // 使用 IgnorePointer 让 Flutter 前景内容不拦截指针事件，事件将命中下层 UiKitView。
+      final nonInteractiveForeground = IgnorePointer(
+        ignoring: true,
+        child: content,
+      );
       final body = Stack(
         alignment: alignment,
         children: [
@@ -28,7 +34,7 @@ extension IOSLiquidGlassX on Widget {
             ),
           ),
           // 前景内容
-          content,
+          nonInteractiveForeground,
         ],
       );
       return margin != null ? Container(margin: margin, child: body) : body;
