@@ -169,19 +169,22 @@ class PlaceDetailPanel extends ConsumerWidget {
                       if (inPlan) {
                         // 从计划中移除
                         await ref.read(planControllerProvider.notifier).deleteNode(selected.nodeId!);
+                        if (!context.mounted) return;
                         ref.read(selectedPlaceProvider.notifier).state = null;
                         ref.read(panelPageProvider.notifier).state = PanelPage.timeline;
                       } else {
                         // 加入计划
+                        final mode = ref.read(transportModeProvider);
                         await ref.read(planControllerProvider.notifier).addNodeAt(
                               selected.point,
                               title: selected.title,
-                              mode: ref.read(transportModeProvider),
+                              mode: mode,
                             );
-                            
+                        if (!context.mounted) return;
+
                         final controller = ref.read(mapControllerProvider);
                         final currentPage = ref.read(panelPageProvider);
-                        
+
                         if (controller != null) {
                           if (currentPage == PanelPage.timeline) {
                             // 时间轴页：适配整个计划
@@ -206,7 +209,8 @@ class PlaceDetailPanel extends ConsumerWidget {
                             );
                           }
                         }
-                        
+                        if (!context.mounted) return;
+
                         // 高亮新加入的节点（通常是最后一个）
                         final plan = ref.read(planControllerProvider).valueOrNull?.currentPlan;
                         if (plan != null && plan.nodes.isNotEmpty) {
