@@ -147,50 +147,42 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
         let shadowR: CGFloat = 10
         let rippleMargin: CGFloat = max(0, rippleMaxDiameter / 2)
         let buffer: CGFloat = 2
-        let dynamicOuterMargin: CGFloat = interactive ? max(4, rippleMargin + shadowR + buffer) : 4
+        var dynamicOuterMargin: CGFloat = interactive ? max(4, rippleMargin + shadowR + buffer) : 4
+        // 依据容器初始尺寸限制外边距上限，避免内部空间被完全挤占
+        let maxAllowedMargin = max(0, min(frame.size.width, frame.size.height) / 2 - 4)
+        dynamicOuterMargin = min(dynamicOuterMargin, maxAllowedMargin)
 
         // 通过 layoutMargins 在容器内部留出透明外边距（尽量最小化浪费空间）
         containerView.layoutMargins = UIEdgeInsets(top: dynamicOuterMargin, left: dynamicOuterMargin, bottom: dynamicOuterMargin, right: dynamicOuterMargin)
         containerView.preservesSuperviewLayoutMargins = false
 
         if #available(iOS 13.0, *) {
-            if #available(iOS 26.0, *) {
-                let model = GlassTapModel()
-                self.tapModel = model
-                let hosting = UIHostingController(
-                    rootView: LiquidGlassSwiftUIView(
-                        borderRadius: borderRadius,
-                        interactive: interactive,
-                        pressScale: pressScale,
-                        rippleMaxDiameter: rippleMaxDiameter,
-                        springResponse: springResponse,
-                        springDampingFraction: springDampingFraction,
-                        tapModel: model
-                    )
+            // iOS 13+ 始终使用 SwiftUI 承载视图：
+            // - iOS 26 上通过 glassEffect 呈现 Liquid Glass
+            // - 低版本通过 .ultraThinMaterial 回退（详见 GlassEffectModifier）
+            let model = GlassTapModel()
+            self.tapModel = model
+            let hosting = UIHostingController(
+                rootView: LiquidGlassSwiftUIView(
+                    borderRadius: borderRadius,
+                    interactive: interactive,
+                    pressScale: pressScale,
+                    rippleMaxDiameter: rippleMaxDiameter,
+                    springResponse: springResponse,
+                    springDampingFraction: springDampingFraction,
+                    tapModel: model
                 )
-                hosting.view.backgroundColor = .clear
-                hosting.view.clipsToBounds = false
-                hosting.view.translatesAutoresizingMaskIntoConstraints = false
-                containerView.addSubview(hosting.view)
-                NSLayoutConstraint.activate([
-                    hosting.view.leadingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.leadingAnchor),
-                    hosting.view.trailingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.trailingAnchor),
-                    hosting.view.topAnchor.constraint(equalTo: containerView.layoutMarginsGuide.topAnchor),
-                    hosting.view.bottomAnchor.constraint(equalTo: containerView.layoutMarginsGuide.bottomAnchor)
-                ])
-            } else {
-                let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
-                blur.translatesAutoresizingMaskIntoConstraints = false
-                blur.clipsToBounds = true
-                blur.layer.cornerRadius = borderRadius
-                containerView.addSubview(blur)
-                NSLayoutConstraint.activate([
-                    blur.leadingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.leadingAnchor),
-                    blur.trailingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.trailingAnchor),
-                    blur.topAnchor.constraint(equalTo: containerView.layoutMarginsGuide.topAnchor),
-                    blur.bottomAnchor.constraint(equalTo: containerView.layoutMarginsGuide.bottomAnchor)
-                ])
-            }
+            )
+            hosting.view.backgroundColor = .clear
+            hosting.view.clipsToBounds = false
+            hosting.view.translatesAutoresizingMaskIntoConstraints = false
+            containerView.addSubview(hosting.view)
+            NSLayoutConstraint.activate([
+                hosting.view.leadingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.leadingAnchor),
+                hosting.view.trailingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.trailingAnchor),
+                hosting.view.topAnchor.constraint(equalTo: containerView.layoutMarginsGuide.topAnchor),
+                hosting.view.bottomAnchor.constraint(equalTo: containerView.layoutMarginsGuide.bottomAnchor)
+            ])
         } else {
             let blur = UIVisualEffectView(effect: UIBlurEffect(style: .light))
             blur.translatesAutoresizingMaskIntoConstraints = false
