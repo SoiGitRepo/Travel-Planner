@@ -3,6 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../glassy/glassy.dart';
 
+// 内部工具：将 Color 转换为 ARGB 32 位整数
+int _toArgbInt(Color c) {
+  return (((c.a * 255.0).round() & 0xFF) << 24) |
+      (((c.r * 255.0).round() & 0xFF) << 16) |
+      (((c.g * 255.0).round() & 0xFF) << 8) |
+      ((c.b * 255.0).round() & 0xFF);
+}
+
 class _IOSLiquidGlassContainer extends StatefulWidget {
   final Widget child;
   final double borderRadius;
@@ -51,6 +59,28 @@ class _IOSLiquidGlassContainer extends StatefulWidget {
       _IOSLiquidGlassContainerState();
 }
 
+// 构建原生视图所需的参数映射
+extension _IOSLiquidGlassContainerParams on _IOSLiquidGlassContainer {
+  Map<String, dynamic> _buildCreationParams() {
+    final map = <String, dynamic>{
+      'borderRadius': borderRadius,
+      'interactive': interactive,
+      'pressScale': pressScale,
+      'rippleMaxDiameter': rippleMaxDiameter,
+      'springResponse': springResponse,
+      'springDampingFraction': springDampingFraction,
+      'bgOpacity': bgOpacity,
+      'shadowOpacity': shadowOpacity,
+      'shadowRadius': shadowRadius,
+      'shadowOffsetX': shadowOffsetX,
+      'shadowOffsetY': shadowOffsetY,
+    };
+    if (bgColor != null) map['bgColor'] = _toArgbInt(bgColor!);
+    if (shadowColor != null) map['shadowColor'] = _toArgbInt(shadowColor!);
+    return map;
+  }
+}
+
 class _IOSLiquidGlassContainerState extends State<_IOSLiquidGlassContainer> {
   // 取消与原生的点击传播：无通道、无回调，仅各自处理自身点击。
 
@@ -67,29 +97,7 @@ class _IOSLiquidGlassContainerState extends State<_IOSLiquidGlassContainer> {
         Positioned.fill(
           child: UiKitView(
             viewType: 'GlassContainer',
-            creationParams: {
-              'borderRadius': widget.borderRadius,
-              'interactive': widget.interactive,
-              'pressScale': widget.pressScale,
-              'rippleMaxDiameter': widget.rippleMaxDiameter,
-              'springResponse': widget.springResponse,
-              'springDampingFraction': widget.springDampingFraction,
-              if (widget.bgColor != null)
-                'bgColor': (((widget.bgColor!.a * 255.0).round() & 0xFF) << 24) |
-                    (((widget.bgColor!.r * 255.0).round() & 0xFF) << 16) |
-                    (((widget.bgColor!.g * 255.0).round() & 0xFF) << 8) |
-                    ((widget.bgColor!.b * 255.0).round() & 0xFF),
-              'bgOpacity': widget.bgOpacity,
-              if (widget.shadowColor != null)
-                'shadowColor': (((widget.shadowColor!.a * 255.0).round() & 0xFF) << 24) |
-                    (((widget.shadowColor!.r * 255.0).round() & 0xFF) << 16) |
-                    (((widget.shadowColor!.g * 255.0).round() & 0xFF) << 8) |
-                    ((widget.shadowColor!.b * 255.0).round() & 0xFF),
-              'shadowOpacity': widget.shadowOpacity,
-              'shadowRadius': widget.shadowRadius,
-              'shadowOffsetX': widget.shadowOffsetX,
-              'shadowOffsetY': widget.shadowOffsetY,
-            },
+            creationParams: widget._buildCreationParams(),
             creationParamsCodec: const StandardMessageCodec(),
           ),
         ),

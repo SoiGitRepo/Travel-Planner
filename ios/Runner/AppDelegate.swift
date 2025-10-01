@@ -121,6 +121,15 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
     @available(iOS 13.0, *)
     private var tapModel: GlassTapModel?
 
+    // 计算为动效与阴影预留的外边距（带上限约束）
+    private static func computeDynamicOuterMargin(frame: CGRect, rippleMaxDiameter: CGFloat, shadowRadius: CGFloat, interactive: Bool) -> CGFloat {
+        let rippleMargin = max(0, rippleMaxDiameter / 2)
+        let buffer: CGFloat = 2
+        let base = interactive ? max(4, rippleMargin + shadowRadius + buffer) : 4
+        let maxAllowed = max(0, min(frame.size.width, frame.size.height) / 2 - 4)
+        return min(base, maxAllowed)
+    }
+
     init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
         self.containerView = UIView(frame: frame)
         super.init()
@@ -172,19 +181,12 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
         // - 波纹最大半径会向外扩展 rippleMaxDiameter/2
         // - 阴影也会带来额外扩展（使用当前 shadowRadius）
         // - 额外 2pt 缓冲保障抗锯齿
-        let shadowR: CGFloat = shadowRadius
-        let rippleMargin: CGFloat = max(0, rippleMaxDiameter / 2)
-        let buffer: CGFloat = 2
-        var dynamicOuterMargin: CGFloat = interactive ? max(4, rippleMargin + shadowR + buffer) : 4
-        // 依据容器初始尺寸限制外边距上限，避免内部空间被完全挤占
-        let maxAllowedMargin = max(0, min(frame.size.width, frame.size.height) / 2 - 4)
-        dynamicOuterMargin = min(dynamicOuterMargin, maxAllowedMargin)
+        let dynamicOuterMargin = Self.computeDynamicOuterMargin(frame: frame, rippleMaxDiameter: rippleMaxDiameter, shadowRadius: shadowRadius, interactive: interactive)
         // 通过 layoutMargins 在容器内部留出透明外边距（尽量最小化浪费空间）
         containerView.layoutMargins = UIEdgeInsets(top: dynamicOuterMargin, left: dynamicOuterMargin, bottom: dynamicOuterMargin, right: dynamicOuterMargin)
         containerView.preservesSuperviewLayoutMargins = false
 
         if #available(iOS 13.0, *) {
-            // if #available(iOS 26.0, *) {
             let model = GlassTapModel()
             self.tapModel = model
             let hosting = UIHostingController(

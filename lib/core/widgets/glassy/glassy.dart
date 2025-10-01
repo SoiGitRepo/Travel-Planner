@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
+import '../ios/ios_liquid_glass.dart';
 
 /// A lightweight wrapper to apply Liquid Glass effect around any widget.
 ///
@@ -48,6 +50,16 @@ extension GlassyX on Widget {
     LiquidGlassSettings? settings,
     EdgeInsetsGeometry? padding,
   }) {
+    if (!apply) return this;
+
+    // iOS 平台：改用原生 iosLiquidGlass，其他平台保持原有渲染器
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return IOSLiquidGlassX(this).iosLiquidGlass(
+        borderRadius: borderRadius,
+        padding: padding,
+      );
+    }
+
     final shape = LiquidRoundedSuperellipse(
       borderRadius: Radius.circular(borderRadius),
     );
@@ -58,20 +70,18 @@ extension GlassyX on Widget {
             child: this,
           )
         : this;
-    return apply
-        ? ClipRRect(
-            borderRadius: BorderRadius.circular(borderRadius),
-            child: LiquidGlass(
-              shape: shape,
-              glassContainsChild: glassContainsChild,
-              settings: settings ?? const LiquidGlassSettings(),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(borderRadius),
-                child: content,
-              ),
-            ),
-          )
-        : this;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: LiquidGlass(
+        shape: shape,
+        glassContainsChild: glassContainsChild,
+        settings: settings ?? const LiquidGlassSettings(),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(borderRadius),
+          child: content,
+        ),
+      ),
+    );
   }
 
   Widget glassyOval({
