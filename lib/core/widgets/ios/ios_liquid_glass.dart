@@ -10,6 +10,8 @@ class _IOSLiquidGlassContainer extends StatefulWidget {
   final Alignment alignment;
   final EdgeInsetsGeometry? margin;
   final EdgeInsetsGeometry? padding;
+  final VoidCallback? onNativeTap;
+  final double outerMargin; // 传递给原生侧的透明外边距
 
   const _IOSLiquidGlassContainer({
     required this.child,
@@ -18,30 +20,17 @@ class _IOSLiquidGlassContainer extends StatefulWidget {
     required this.alignment,
     this.margin,
     this.padding,
+    this.onNativeTap,
+    this.outerMargin = 12,
   });
 
   @override
-  State<_IOSLiquidGlassContainer> createState() => _IOSLiquidGlassContainerState();
+  State<_IOSLiquidGlassContainer> createState() =>
+      _IOSLiquidGlassContainerState();
 }
 
 class _IOSLiquidGlassContainerState extends State<_IOSLiquidGlassContainer> {
-  MethodChannel? _channel;
-
-  void _onPlatformViewCreated(int id) {
-    setState(() {
-      _channel = MethodChannel('GlassContainer/$id');
-    });
-  }
-
-  Future<void> _forwardTap() async {
-    final ch = _channel;
-    if (ch == null) return;
-    try {
-      await ch.invokeMethod('tap', {
-        'type': 'liquid_glass',
-      });
-    } catch (_) {}
-  }
+  // 取消与原生的点击传播：无通道、无回调，仅各自处理自身点击。
 
   @override
   Widget build(BuildContext context) {
@@ -49,33 +38,29 @@ class _IOSLiquidGlassContainerState extends State<_IOSLiquidGlassContainer> {
         ? Padding(padding: widget.padding!, child: widget.child)
         : widget.child;
 
-    // 使用 Listener 捕获指针抬起，既不打断子树手势，又能同步上报到原生
-    final mirroredTap = Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerUp: (_) => _forwardTap(),
-      child: content,
-    );
-
     final stack = Stack(
       alignment: widget.alignment,
+      clipBehavior: Clip.none,
       children: [
         Positioned.fill(
           child: UiKitView(
             viewType: 'GlassContainer',
-            onPlatformViewCreated: _onPlatformViewCreated,
             creationParams: {
               'borderRadius': widget.borderRadius,
               'interactive': widget.interactive,
+              'outerMargin': widget.outerMargin,
             },
             creationParamsCodec: const StandardMessageCodec(),
           ),
         ),
-        // 前景内容依旧可交互
-        mirroredTap,
+        // 前景内容保持自身交互，不与原生互相传播
+        content,
       ],
     );
 
-    return widget.margin != null ? Container(margin: widget.margin, child: stack) : stack;
+    return widget.margin != null
+        ? Container(margin: widget.margin, child: stack)
+        : stack;
   }
 }
 
@@ -86,6 +71,8 @@ extension IOSLiquidGlassX on Widget {
     Alignment alignment = Alignment.center,
     EdgeInsetsGeometry? margin,
     EdgeInsetsGeometry? padding,
+    VoidCallback? onNativeTap,
+    double outerMargin = 12,
   }) {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       return _IOSLiquidGlassContainer(
@@ -94,6 +81,8 @@ extension IOSLiquidGlassX on Widget {
         alignment: alignment,
         margin: margin,
         padding: padding,
+        onNativeTap: onNativeTap,
+        outerMargin: outerMargin,
         child: this,
       );
     }
