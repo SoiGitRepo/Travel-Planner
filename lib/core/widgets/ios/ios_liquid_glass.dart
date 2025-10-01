@@ -3,6 +3,82 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../glassy/glassy.dart';
 
+class _IOSLiquidGlassContainer extends StatefulWidget {
+  final Widget child;
+  final double borderRadius;
+  final bool interactive;
+  final Alignment alignment;
+  final EdgeInsetsGeometry? margin;
+  final EdgeInsetsGeometry? padding;
+
+  const _IOSLiquidGlassContainer({
+    required this.child,
+    required this.borderRadius,
+    required this.interactive,
+    required this.alignment,
+    this.margin,
+    this.padding,
+  });
+
+  @override
+  State<_IOSLiquidGlassContainer> createState() => _IOSLiquidGlassContainerState();
+}
+
+class _IOSLiquidGlassContainerState extends State<_IOSLiquidGlassContainer> {
+  MethodChannel? _channel;
+
+  void _onPlatformViewCreated(int id) {
+    setState(() {
+      _channel = MethodChannel('GlassContainer/$id');
+    });
+  }
+
+  Future<void> _forwardTap() async {
+    final ch = _channel;
+    if (ch == null) return;
+    try {
+      await ch.invokeMethod('tap', {
+        'type': 'liquid_glass',
+      });
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final content = widget.padding != null
+        ? Padding(padding: widget.padding!, child: widget.child)
+        : widget.child;
+
+    // 使用 Listener 捕获指针抬起，既不打断子树手势，又能同步上报到原生
+    final mirroredTap = Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerUp: (_) => _forwardTap(),
+      child: content,
+    );
+
+    final stack = Stack(
+      alignment: widget.alignment,
+      children: [
+        Positioned.fill(
+          child: UiKitView(
+            viewType: 'GlassContainer',
+            onPlatformViewCreated: _onPlatformViewCreated,
+            creationParams: {
+              'borderRadius': widget.borderRadius,
+              'interactive': widget.interactive,
+            },
+            creationParamsCodec: const StandardMessageCodec(),
+          ),
+        ),
+        // 前景内容依旧可交互
+        mirroredTap,
+      ],
+    );
+
+    return widget.margin != null ? Container(margin: widget.margin, child: stack) : stack;
+  }
+}
+
 extension IOSLiquidGlassX on Widget {
   Widget iosLiquidGlass({
     double borderRadius = 20,
@@ -12,32 +88,14 @@ extension IOSLiquidGlassX on Widget {
     EdgeInsetsGeometry? padding,
   }) {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
-      final content = padding != null ? Padding(padding: padding, child: this) : this;
-      // 按要求：在 iOS 上无论内容层级如何，触摸事件都传递给原生 Liquid Glass。
-      // 使用 IgnorePointer 让 Flutter 前景内容不拦截指针事件，事件将命中下层 UiKitView。
-      final nonInteractiveForeground = IgnorePointer(
-        ignoring: true,
-        child: content,
-      );
-      final body = Stack(
+      return _IOSLiquidGlassContainer(
+        borderRadius: borderRadius,
+        interactive: interactive,
         alignment: alignment,
-        children: [
-          // iOS 原生 Liquid Glass 背景
-          Positioned.fill(
-            child: UiKitView(
-              viewType: 'GlassContainer',
-              creationParams: {
-                'borderRadius': borderRadius,
-                'interactive': interactive,
-              },
-              creationParamsCodec: const StandardMessageCodec(),
-            ),
-          ),
-          // 前景内容
-          nonInteractiveForeground,
-        ],
+        margin: margin,
+        padding: padding,
+        child: this,
       );
-      return margin != null ? Container(margin: margin, child: body) : body;
     }
 
     // 非 iOS：使用现有 shader 方案回退

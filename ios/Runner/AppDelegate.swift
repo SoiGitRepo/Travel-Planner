@@ -25,9 +25,17 @@ import SwiftUI
 // MARK: - Inline GlassContainer types (fallback if Xcode project doesn't include the file)
 
 @available(iOS 13.0, *)
+final class GlassTapModel: ObservableObject {
+    @Published var tapCounter: Int = 0
+}
+
+@available(iOS 13.0, *)
 private struct LiquidGlassSwiftUIView: View {
     let borderRadius: CGFloat
     let interactive: Bool
+    @ObservedObject var tapModel: GlassTapModel
+
+    @State private var pressed: Bool = false
 
     var body: some View {
         ZStack { Color.clear }
@@ -36,6 +44,23 @@ private struct LiquidGlassSwiftUIView: View {
                     .fill(.clear)
                     .modifier(GlassEffectModifier(borderRadius: borderRadius, interactive: interactive))
             )
+            .overlay(
+                // 使用 SwiftUI 动画产生点击反馈（原生层实现）
+                RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                    .stroke(.primary.opacity(pressed ? 0.25 : 0.0), lineWidth: 1)
+                    .animation(.easeOut(duration: 0.18), value: pressed)
+            )
+            .onChange(of: tapModel.tapCounter) { _ in
+                // 每次收到 Dart 同步的 tap，触发一次原生 SwiftUI 动画与可选触觉反馈
+                pressed = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                    pressed = false
+                }
+                if #available(iOS 13.0, *) {
+                    let gen = UIImpactFeedbackGenerator(style: .light)
+                    gen.impactOccurred()
+                }
+            }
             .clipped()
     }
 }
@@ -70,6 +95,9 @@ private struct GlassEffectModifier: ViewModifier {
 
 class GlassContainerPlatformView: NSObject, FlutterPlatformView {
     private let containerView: UIView
+    private var channel: FlutterMethodChannel?
+    @available(iOS 13.0, *)
+    private var tapModel: GlassTapModel?
 
     init(frame: CGRect, viewId: Int64, args: Any?, messenger: FlutterBinaryMessenger) {
         self.containerView = UIView(frame: frame)
@@ -94,7 +122,9 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
 
         if #available(iOS 13.0, *) {
             if #available(iOS 26.0, *) {
-                let hosting = UIHostingController(rootView: LiquidGlassSwiftUIView(borderRadius: borderRadius, interactive: interactive))
+                let model = GlassTapModel()
+                self.tapModel = model
+                let hosting = UIHostingController(rootView: LiquidGlassSwiftUIView(borderRadius: borderRadius, interactive: interactive, tapModel: model))
                 hosting.view.backgroundColor = .clear
                 hosting.view.frame = containerView.bounds
                 hosting.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -120,6 +150,33 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
         containerView.layer.shadowOpacity = 0.15
         containerView.layer.shadowRadius = 10
         containerView.layer.shadowOffset = CGSize(width: 0, height: 4)
+
+        // 建立与 Dart 的 MethodChannel，用于接收 tap 事件
+        let ch = FlutterMethodChannel(name: "GlassContainer/\(viewId)", binaryMessenger: messenger)
+        self.channel = ch
+        ch.setMethodCallHandler { [weak self] call, result in
+            guard let self = self else { result(FlutterError(code: "unavailable", message: "deallocated", details: nil)); return }
+            switch call.method {
+            case "tap":
+                // 解析参数中的类型，默认为 liquid_glass
+                var kind = "liquid_glass"
+                if let args = call.arguments as? [String: Any], let t = args["type"] as? String {
+                    kind = t
+                }
+                if kind == "liquid_glass" {
+                    if #available(iOS 13.0, *) {
+                        DispatchQueue.main.async {
+                            self.tapModel?.tapCounter += 1
+                        }
+                    }
+                    result(nil)
+                } else {
+                    result(FlutterError(code: "invalid_args", message: "Unsupported type: \(kind)", details: nil))
+                }
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
     }
 
     func view() -> UIView { containerView }
