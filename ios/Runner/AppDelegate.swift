@@ -182,9 +182,10 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
         // - 阴影也会带来额外扩展（使用当前 shadowRadius）
         // - 额外 2pt 缓冲保障抗锯齿
         let dynamicOuterMargin = Self.computeDynamicOuterMargin(frame: frame, rippleMaxDiameter: rippleMaxDiameter, shadowRadius: shadowRadius, interactive: interactive)
-        // 通过 layoutMargins 在容器内部留出透明外边距（尽量最小化浪费空间）
+        // 在容器内部留出透明外边距（尽量最小化浪费空间），并忽略 Safe Area 以允许覆盖到底部安全区
         containerView.layoutMargins = UIEdgeInsets(top: dynamicOuterMargin, left: dynamicOuterMargin, bottom: dynamicOuterMargin, right: dynamicOuterMargin)
         containerView.preservesSuperviewLayoutMargins = false
+        if #available(iOS 11.0, *) { containerView.insetsLayoutMarginsFromSafeArea = false }
 
         if #available(iOS 13.0, *) {
             let model = GlassTapModel()
@@ -208,10 +209,10 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
             hosting.view.translatesAutoresizingMaskIntoConstraints = false
             containerView.addSubview(hosting.view)
             NSLayoutConstraint.activate([
-                hosting.view.leadingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.leadingAnchor),
-                hosting.view.trailingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.trailingAnchor),
-                hosting.view.topAnchor.constraint(equalTo: containerView.layoutMarginsGuide.topAnchor),
-                hosting.view.bottomAnchor.constraint(equalTo: containerView.layoutMarginsGuide.bottomAnchor)
+                hosting.view.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: dynamicOuterMargin),
+                hosting.view.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -dynamicOuterMargin),
+                hosting.view.topAnchor.constraint(equalTo: containerView.topAnchor, constant: dynamicOuterMargin),
+                hosting.view.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -dynamicOuterMargin)
             ])
         } else {
             let blur = UIVisualEffectView(effect: UIBlurEffect(style: .light))
@@ -220,10 +221,10 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
             blur.layer.cornerRadius = borderRadius
             containerView.addSubview(blur)
             NSLayoutConstraint.activate([
-                blur.leadingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.leadingAnchor),
-                blur.trailingAnchor.constraint(equalTo: containerView.layoutMarginsGuide.trailingAnchor),
-                blur.topAnchor.constraint(equalTo: containerView.layoutMarginsGuide.topAnchor),
-                blur.bottomAnchor.constraint(equalTo: containerView.layoutMarginsGuide.bottomAnchor)
+                blur.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: dynamicOuterMargin),
+                blur.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -dynamicOuterMargin),
+                blur.topAnchor.constraint(equalTo: containerView.topAnchor, constant: dynamicOuterMargin),
+                blur.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -dynamicOuterMargin)
             ])
         }
 

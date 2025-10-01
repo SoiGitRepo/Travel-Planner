@@ -3,9 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:travel_planner/core/widgets/glassy/glassy.dart';
 import '../../plan/data/plan_io.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/models/node.dart';
@@ -108,8 +106,8 @@ class TimelinePanel extends ConsumerWidget {
                   ),
                 ],
               ),
-              // 将背景白色延展至屏幕底部，同时通过 padding 让内容不占用该留白区域
-              padding: EdgeInsets.only(bottom: bottomSafe),
+              // 背景延展至屏幕底部；滚动内容末尾会追加一个等高占位，避免被 Home 指示条遮挡
+              padding: EdgeInsets.zero,
               child: CustomScrollView(
                 controller: scrollController,
                 slivers: () {
@@ -200,12 +198,14 @@ class TimelinePanel extends ConsumerWidget {
                         child: PanelSearch(),
                       ),
                     );
+                    slivers.add(SliverToBoxAdapter(child: SizedBox(height: bottomSafe)));
                     return slivers;
                   }
                   if (page == PanelPage.detail) {
                     slivers.add(
                       const SliverToBoxAdapter(child: PlaceDetailPanel()),
                     );
+                    slivers.add(SliverToBoxAdapter(child: SizedBox(height: bottomSafe)));
                     return slivers;
                   }
                   // 总览卡片与添加日期计划入口（仅时间轴页）
@@ -667,19 +667,12 @@ class TimelinePanel extends ConsumerWidget {
                       ),
                     ),
                   );
+                  // 末尾为底部安全区追加占位，避免内容被遮挡
+                  slivers.add(SliverToBoxAdapter(
+                    child: SizedBox(height: MediaQuery.of(context).viewPadding.bottom),
+                  ));
                   return slivers;
                 }(),
-              ),
-            ).glassy(
-              borderRadius: 40,
-              settings: const LiquidGlassSettings(
-                blur: 4,
-                thickness: 60,
-                blend: 40,
-                lightAngle: 0.3 * pi,
-                lightIntensity: 0.5,
-                saturation: 0.5,
-                lightness: 0.5,
               ),
             );
           },
