@@ -115,11 +115,11 @@ class TimelinePanel extends ConsumerWidget {
                 controller: scrollController,
                 slivers: () {
                   final slivers = <Widget>[
-                    const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                    const SliverToBoxAdapter(child: SizedBox(height: 4)),
                     SliverToBoxAdapter(
                       child: Center(
                         child: Container(
-                          height: 6,
+                          height: 4,
                           width: 56,
                           decoration: BoxDecoration(
                               color: Colors.black26,
@@ -127,7 +127,7 @@ class TimelinePanel extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                    const SliverToBoxAdapter(child: SizedBox(height: 4)),
                   ];
                   // 顶部头部：返回或搜索入口
                   if (page == PanelPage.timeline) {
@@ -136,7 +136,7 @@ class TimelinePanel extends ConsumerWidget {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(42),
                             onTap: () => ref
                                 .read(panelPageProvider.notifier)
                                 .state = PanelPage.search,
@@ -145,7 +145,7 @@ class TimelinePanel extends ConsumerWidget {
                                   horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
                                 color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(48),
                                 boxShadow: [
                                   BoxShadow(
                                       color: Colors.black.withAlpha(13),
@@ -676,13 +676,12 @@ class TimelinePanel extends ConsumerWidget {
             ).iosLiquidGlass(
               borderRadius: 40,
               bleedBottom: true,
-              roundTopOnly: false,
               // 提升可见性：轻微背景着色与柔和阴影
               bgColor: Colors.white,
               bgOpacity: 0.08,
               shadowColor: Colors.black,
               shadowOpacity: 0.12,
-              shadowRadius: 16,
+              shadowRadius: 60,
               shadowOffsetY: -2,
             );
           },

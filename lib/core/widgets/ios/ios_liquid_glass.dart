@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../glassy/glassy.dart';
@@ -34,8 +35,6 @@ class _IOSLiquidGlassContainer extends StatefulWidget {
   final double shadowOffsetY;
   // 是否允许底部出血（覆盖到屏幕底部安全区）
   final bool bleedBottom;
-  // 是否仅圆角顶部（适用于底部面板）
-  final bool roundTopOnly;
 
   const _IOSLiquidGlassContainer({
     required this.child,
@@ -57,7 +56,6 @@ class _IOSLiquidGlassContainer extends StatefulWidget {
     this.shadowOffsetX = 0,
     this.shadowOffsetY = 4,
     this.bleedBottom = false,
-    this.roundTopOnly = false,
   });
 
   @override
@@ -81,7 +79,6 @@ extension _IOSLiquidGlassContainerParams on _IOSLiquidGlassContainer {
       'shadowOffsetX': shadowOffsetX,
       'shadowOffsetY': shadowOffsetY,
       'bleedBottom': bleedBottom,
-      'roundTopOnly': roundTopOnly,
     };
     if (bgColor != null) map['bgColor'] = _toArgbInt(bgColor!);
     if (shadowColor != null) map['shadowColor'] = _toArgbInt(shadowColor!);
@@ -113,6 +110,9 @@ class _IOSLiquidGlassContainerState extends State<_IOSLiquidGlassContainer> {
               viewType: 'GlassContainer',
               creationParams: widget._buildCreationParams(),
               creationParamsCodec: const StandardMessageCodec(),
+              gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
+              },
             ),
           );
         }),
@@ -155,7 +155,6 @@ extension IOSLiquidGlassX on Widget {
     double shadowOffsetX = 0,
     double shadowOffsetY = 4,
     bool bleedBottom = false,
-    bool roundTopOnly = false,
   }) {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       return _IOSLiquidGlassContainer(
@@ -177,7 +176,6 @@ extension IOSLiquidGlassX on Widget {
         shadowOffsetX: shadowOffsetX,
         shadowOffsetY: shadowOffsetY,
         bleedBottom: bleedBottom,
-        roundTopOnly: roundTopOnly,
         child: this,
       );
     }

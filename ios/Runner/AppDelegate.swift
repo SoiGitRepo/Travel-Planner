@@ -41,7 +41,6 @@ private struct LiquidGlassSwiftUIView: View {
     // 背景着色（由 Flutter 传入，可选）
     let bgUIColor: UIColor?
     let bgOpacity: Double
-    let roundTopOnly: Bool
     @ObservedObject var tapModel: GlassTapModel
 
     @State private var isPressed: Bool = false
@@ -49,19 +48,14 @@ private struct LiquidGlassSwiftUIView: View {
     var body: some View {
         ZStack { Color.clear }
             .background(
-                // 由 GlassEffectModifier 统一决定：iOS26 用 glassEffect；低版本用 .ultraThinMaterial 回退
-                GlassEffectView(borderRadius: borderRadius, interactive: interactive, roundTopOnly: roundTopOnly)
+                // 由 GlassEffectView 统一决定：iOS26 用 glassEffect；低版本用 .ultraThinMaterial 回退
+                GlassEffectView(borderRadius: borderRadius, interactive: interactive)
             )
             .overlay(
                 Group {
                     if let tint = bgUIColor, bgOpacity > 0 {
-                        if roundTopOnly {
-                            TopRoundedShape(radius: borderRadius)
-                                .fill(Color(uiColor: tint).opacity(bgOpacity))
-                        } else {
-                            RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
-                                .fill(Color(uiColor: tint).opacity(bgOpacity))
-                        }
+                        RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                            .fill(Color(uiColor: tint).opacity(bgOpacity))
                     }
                 }
             )
@@ -98,59 +92,28 @@ private struct LiquidGlassSwiftUIView: View {
 private struct GlassEffectView: View {
     let borderRadius: CGFloat
     let interactive: Bool
-    let roundTopOnly: Bool
 
     var body: some View {
         Group {
             if #available(iOS 26.0, *) {
-                if roundTopOnly {
-                    ZStack { Color.clear }
-                        .glassEffect(
-                            interactive ? .regular.interactive() : .regular,
-                            in: TopRoundedShape(radius: borderRadius)
-                        )
-                } else {
-                    ZStack { Color.clear }
-                        .glassEffect(
-                            interactive ? .regular.interactive() : .regular,
-                            in: RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
-                        )
-                }
+                ZStack { Color.clear }
+                    .glassEffect(
+                        interactive ? .regular.interactive() : .regular,
+                        in: RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                    )
             } else {
-                if roundTopOnly {
-                    TopRoundedShape(radius: borderRadius)
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            TopRoundedShape(radius: borderRadius)
-                                .stroke(Color.primary.opacity(0.2), lineWidth: 0.7)
-                        )
-                } else {
-                    RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
-                                .stroke(Color.primary.opacity(0.2), lineWidth: 0.7)
-                        )
-                }
+                RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                            .stroke(Color.primary.opacity(0.2), lineWidth: 0.7)
+                    )
             }
         }
     }
 }
 
-@available(iOS 13.0, *)
-private struct TopRoundedShape: Shape {
-    let radius: CGFloat
-    func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(
-            roundedRect: rect,
-            byRoundingCorners: [.topLeft, .topRight],
-            cornerRadii: CGSize(width: radius, height: radius)
-        )
-        return Path(path.cgPath)
-    }
-}
-
-// Removed ShapeFactory to avoid opaque return type issues with conditional shapes.
+// Removed TopRoundedShape and conditional shapes; always use full rounded rectangle.
 
 class GlassContainerPlatformView: NSObject, FlutterPlatformView {
     private let containerView: UIView
@@ -189,7 +152,7 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
         var bgColor: UIColor? = nil
         var bgOpacity: Double = 0.0
         var bleedBottom: Bool = false
-        var roundTopOnly: Bool = false
+        
 
         if let dict = args as? [String: Any] {
             if let br = dict["borderRadius"] as? NSNumber {
@@ -214,7 +177,7 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
             if let bg = dict["bgColor"] as? NSNumber { bgColor = GlassContainerPlatformView.colorFromARGBInt(bg.int64Value) }
             if let bgo = dict["bgOpacity"] as? Double { bgOpacity = max(0.0, min(1.0, bgo)) }
             if let bb = dict["bleedBottom"] as? Bool { bleedBottom = bb }
-            if let rto = dict["roundTopOnly"] as? Bool { roundTopOnly = rto }
+            
         }
 
         // 根据动效参数动态计算所需外边距：
@@ -241,12 +204,12 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
                     springDampingFraction: springDampingFraction,
                     bgUIColor: bgColor,
                     bgOpacity: bgOpacity,
-                    roundTopOnly: roundTopOnly,
                     tapModel: model
                 )
             )
             hosting.view.backgroundColor = .clear
             hosting.view.isOpaque = false
+            hosting.view.isUserInteractionEnabled = true
             hosting.view.clipsToBounds = false
             hosting.view.translatesAutoresizingMaskIntoConstraints = false
             if #available(iOS 11.0, *) {
@@ -262,11 +225,10 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
         } else {
             let blur = UIVisualEffectView(effect: UIBlurEffect(style: .light))
             blur.translatesAutoresizingMaskIntoConstraints = false
+            blur.isUserInteractionEnabled = true
             blur.clipsToBounds = true
             blur.layer.cornerRadius = borderRadius
-            if roundTopOnly {
-                blur.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-            }
+            
             containerView.addSubview(blur)
             NSLayoutConstraint.activate([
                 blur.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: dynamicOuterMargin),
