@@ -16,6 +16,14 @@ class _IOSLiquidGlassContainer extends StatefulWidget {
   final double rippleMaxDiameter; // 波纹最大直径（默认 60）
   final double springResponse; // 弹簧响应时间
   final double springDampingFraction; // 弹簧阻尼
+  // 阴影与背景参数：
+  final Color? bgColor;
+  final double bgOpacity; // 0..1
+  final Color? shadowColor;
+  final double shadowOpacity; // 0..1
+  final double shadowRadius;
+  final double shadowOffsetX;
+  final double shadowOffsetY;
 
   const _IOSLiquidGlassContainer({
     required this.child,
@@ -29,6 +37,13 @@ class _IOSLiquidGlassContainer extends StatefulWidget {
     this.rippleMaxDiameter = 60,
     this.springResponse = 0.3,
     this.springDampingFraction = 0.6,
+    this.bgColor,
+    this.bgOpacity = 0.0,
+    this.shadowColor,
+    this.shadowOpacity = 0.15,
+    this.shadowRadius = 10,
+    this.shadowOffsetX = 0,
+    this.shadowOffsetY = 4,
   });
 
   @override
@@ -59,6 +74,13 @@ class _IOSLiquidGlassContainerState extends State<_IOSLiquidGlassContainer> {
               'rippleMaxDiameter': widget.rippleMaxDiameter,
               'springResponse': widget.springResponse,
               'springDampingFraction': widget.springDampingFraction,
+              if (widget.bgColor != null) 'bgColor': widget.bgColor!.value,
+              'bgOpacity': widget.bgOpacity,
+              if (widget.shadowColor != null) 'shadowColor': widget.shadowColor!.value,
+              'shadowOpacity': widget.shadowOpacity,
+              'shadowRadius': widget.shadowRadius,
+              'shadowOffsetX': widget.shadowOffsetX,
+              'shadowOffsetY': widget.shadowOffsetY,
             },
             creationParamsCodec: const StandardMessageCodec(),
           ),
@@ -86,6 +108,13 @@ extension IOSLiquidGlassX on Widget {
     double rippleMaxDiameter = 60,
     double springResponse = 0.3,
     double springDampingFraction = 0.6,
+    Color? bgColor,
+    double bgOpacity = 0.0,
+    Color? shadowColor,
+    double shadowOpacity = 0.15,
+    double shadowRadius = 10,
+    double shadowOffsetX = 0,
+    double shadowOffsetY = 4,
   }) {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       return _IOSLiquidGlassContainer(
@@ -99,6 +128,13 @@ extension IOSLiquidGlassX on Widget {
         rippleMaxDiameter: rippleMaxDiameter,
         springResponse: springResponse,
         springDampingFraction: springDampingFraction,
+        bgColor: bgColor,
+        bgOpacity: bgOpacity,
+        shadowColor: shadowColor,
+        shadowOpacity: shadowOpacity,
+        shadowRadius: shadowRadius,
+        shadowOffsetX: shadowOffsetX,
+        shadowOffsetY: shadowOffsetY,
         child: this,
       );
     }

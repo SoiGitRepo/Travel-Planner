@@ -38,6 +38,9 @@ private struct LiquidGlassSwiftUIView: View {
     let rippleMaxDiameter: CGFloat
     let springResponse: Double
     let springDampingFraction: Double
+    // 背景着色（由 Flutter 传入，可选）
+    let bgUIColor: UIColor?
+    let bgOpacity: Double
     @ObservedObject var tapModel: GlassTapModel
 
     @State private var isPressed: Bool = false
@@ -48,6 +51,14 @@ private struct LiquidGlassSwiftUIView: View {
                 RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
                     .fill(.ultraThinMaterial)
                     .modifier(GlassEffectModifier(borderRadius: borderRadius, interactive: interactive))
+            )
+            .overlay(
+                Group {
+                    if let tint = bgUIColor, bgOpacity > 0 {
+                        RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                            .fill(Color(uiColor: tint).opacity(bgOpacity))
+                    }
+                }
             )
             .scaleEffect(isPressed ? pressScale : 1.0)
             .overlay(
@@ -124,6 +135,13 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
         var rippleMaxDiameter: CGFloat = 60
         var springResponse: Double = 0.3
         var springDampingFraction: Double = 0.6
+        // 阴影与背景（默认值）
+        var shadowColor: UIColor = UIColor.black
+        var shadowOpacity: Float = 0.15
+        var shadowRadius: CGFloat = 10
+        var shadowOffset = CGSize(width: 0, height: 4)
+        var bgColor: UIColor? = nil
+        var bgOpacity: Double = 0.0
 
         if let dict = args as? [String: Any] {
             if let br = dict["borderRadius"] as? NSNumber {
@@ -138,28 +156,34 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
             if let rd = dict["rippleMaxDiameter"] as? Double { rippleMaxDiameter = CGFloat(rd) }
             if let sr = dict["springResponse"] as? Double { springResponse = sr }
             if let sdf = dict["springDampingFraction"] as? Double { springDampingFraction = sdf }
+            // 背景/阴影参数
+            if let sc = dict["shadowColor"] as? NSNumber { shadowColor = GlassContainerPlatformView.colorFromARGBInt(sc.int64Value) }
+            if let so = dict["shadowOpacity"] as? Double { shadowOpacity = Float(so) }
+            if let sradius = dict["shadowRadius"] as? Double { shadowRadius = CGFloat(sradius) }
+            if let sdx = dict["shadowOffsetX"] as? Double, let sdy = dict["shadowOffsetY"] as? Double {
+                shadowOffset = CGSize(width: sdx, height: sdy)
+            }
+            if let bg = dict["bgColor"] as? NSNumber { bgColor = GlassContainerPlatformView.colorFromARGBInt(bg.int64Value) }
+            if let bgo = dict["bgOpacity"] as? Double { bgOpacity = max(0.0, min(1.0, bgo)) }
         }
 
         // 根据动效参数动态计算所需外边距：
         // - 波纹最大半径会向外扩展 rippleMaxDiameter/2
         // - 阴影也会带来额外扩展（使用当前 shadowRadius）
         // - 额外 2pt 缓冲保障抗锯齿
-        let shadowR: CGFloat = 10
+        let shadowR: CGFloat = shadowRadius
         let rippleMargin: CGFloat = max(0, rippleMaxDiameter / 2)
         let buffer: CGFloat = 2
         var dynamicOuterMargin: CGFloat = interactive ? max(4, rippleMargin + shadowR + buffer) : 4
         // 依据容器初始尺寸限制外边距上限，避免内部空间被完全挤占
         let maxAllowedMargin = max(0, min(frame.size.width, frame.size.height) / 2 - 4)
         dynamicOuterMargin = min(dynamicOuterMargin, maxAllowedMargin)
-
         // 通过 layoutMargins 在容器内部留出透明外边距（尽量最小化浪费空间）
         containerView.layoutMargins = UIEdgeInsets(top: dynamicOuterMargin, left: dynamicOuterMargin, bottom: dynamicOuterMargin, right: dynamicOuterMargin)
         containerView.preservesSuperviewLayoutMargins = false
 
         if #available(iOS 13.0, *) {
-            // iOS 13+ 始终使用 SwiftUI 承载视图：
-            // - iOS 26 上通过 glassEffect 呈现 Liquid Glass
-            // - 低版本通过 .ultraThinMaterial 回退（详见 GlassEffectModifier）
+            if #available(iOS 26.0, *) {
             let model = GlassTapModel()
             self.tapModel = model
             let hosting = UIHostingController(
@@ -170,6 +194,8 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
                     rippleMaxDiameter: rippleMaxDiameter,
                     springResponse: springResponse,
                     springDampingFraction: springDampingFraction,
+                    bgUIColor: bgColor,
+                    bgOpacity: bgOpacity,
                     tapModel: model
                 )
             )
@@ -197,10 +223,10 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
             ])
         }
 
-        containerView.layer.shadowColor = UIColor.black.cgColor
-        containerView.layer.shadowOpacity = 0.15
-        containerView.layer.shadowRadius = 10
-        containerView.layer.shadowOffset = CGSize(width: 0, height: 4)
+        containerView.layer.shadowColor = shadowColor.cgColor
+        containerView.layer.shadowOpacity = shadowOpacity
+        containerView.layer.shadowRadius = shadowRadius
+        containerView.layer.shadowOffset = shadowOffset
 
         // 原生侧点击：添加手势识别，触发原生反馈并回调 Flutter
         let nativeTap = UITapGestureRecognizer(target: self, action: #selector(handleNativeTap))
