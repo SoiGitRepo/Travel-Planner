@@ -381,18 +381,27 @@ class MapPage extends HookConsumerWidget {
                 backgroundColor: Colors.transparent,
                 foregroundColor: Colors.black87,
                 shadowColor: Colors.transparent,
+                overlayColor: Colors.transparent,
                 elevation: 2,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
               ),
-              onPressed: () => fitToNodes(),
+              onPressed: fitToNodes,
               icon: const Icon(Icons.center_focus_strong),
               label: const Text('适配视野'),
             ).iosLiquidGlass(
               borderRadius: 12,
-              padding: const EdgeInsets.all(2),
+              padding: const EdgeInsets.all(10),
+            ),
+          ),
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 12,
+            right: 12,
+            child: const Text('适配视野').iosLiquidGlass(
+              borderRadius: 12,
+              padding: const EdgeInsets.all(20),
             ),
           ),
           TimelinePanel(controller: sheetController),
