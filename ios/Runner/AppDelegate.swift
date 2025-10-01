@@ -48,8 +48,8 @@ private struct LiquidGlassSwiftUIView: View {
     var body: some View {
         ZStack { Color.clear }
             .background(
-                // 由 GlassEffectView 统一决定：iOS26 用 glassEffect；低版本用 .ultraThinMaterial 回退
-                GlassEffectView(borderRadius: borderRadius, interactive: interactive)
+                RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                    .modifier(GlassEffectModifier(borderRadius: borderRadius, interactive: interactive))
             )
             .overlay(
                 Group {
@@ -89,31 +89,32 @@ private struct LiquidGlassSwiftUIView: View {
 }
 
 @available(iOS 13.0, *)
-private struct GlassEffectView: View {
+private struct GlassEffectModifier: ViewModifier {
     let borderRadius: CGFloat
     let interactive: Bool
 
-    var body: some View {
-        Group {
-            if #available(iOS 26.0, *) {
-                ZStack { Color.clear }
-                    .glassEffect(
-                        interactive ? .regular.interactive() : .regular,
-                        in: RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
-                    )
-            } else {
-                RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
-                            .stroke(Color.primary.opacity(0.2), lineWidth: 0.7)
-                    )
-            }
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            return AnyView(
+                content.glassEffect(
+                    interactive ? .regular.interactive() : .regular,
+                    in: RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                )
+            )
+        } else {
+            return AnyView(
+                content.background(
+                    RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                                .stroke(Color.primary.opacity(0.2), lineWidth: 0.7)
+                        )
+                )
+            )
         }
     }
 }
-
-// Removed TopRoundedShape and conditional shapes; always use full rounded rectangle.
 
 class GlassContainerPlatformView: NSObject, FlutterPlatformView {
     private let containerView: UIView
@@ -209,7 +210,6 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
             )
             hosting.view.backgroundColor = .clear
             hosting.view.isOpaque = false
-            hosting.view.isUserInteractionEnabled = true
             hosting.view.clipsToBounds = false
             hosting.view.translatesAutoresizingMaskIntoConstraints = false
             if #available(iOS 11.0, *) {
@@ -225,7 +225,6 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
         } else {
             let blur = UIVisualEffectView(effect: UIBlurEffect(style: .light))
             blur.translatesAutoresizingMaskIntoConstraints = false
-            blur.isUserInteractionEnabled = true
             blur.clipsToBounds = true
             blur.layer.cornerRadius = borderRadius
             

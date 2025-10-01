@@ -110,9 +110,6 @@ class _IOSLiquidGlassContainerState extends State<_IOSLiquidGlassContainer> {
               viewType: 'GlassContainer',
               creationParams: widget._buildCreationParams(),
               creationParamsCodec: const StandardMessageCodec(),
-              gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-                Factory<TapGestureRecognizer>(() => TapGestureRecognizer()),
-              },
             ),
           );
         }),

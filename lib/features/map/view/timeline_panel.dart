@@ -145,7 +145,7 @@ class TimelinePanel extends ConsumerWidget {
                                   horizontal: 12, vertical: 10),
                               decoration: BoxDecoration(
                                 color: Colors.white,
-                                borderRadius: BorderRadius.circular(48),
+                                borderRadius: BorderRadius.circular(42),
                                 boxShadow: [
                                   BoxShadow(
                                       color: Colors.black.withAlpha(13),
