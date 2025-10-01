@@ -33,6 +33,11 @@ final class GlassTapModel: ObservableObject {
 private struct LiquidGlassSwiftUIView: View {
     let borderRadius: CGFloat
     let interactive: Bool
+    // 动效参数（由 Flutter 传入）
+    let pressScale: CGFloat
+    let rippleMaxDiameter: CGFloat
+    let springResponse: Double
+    let springDampingFraction: Double
     @ObservedObject var tapModel: GlassTapModel
 
     @State private var isPressed: Bool = false
@@ -44,25 +49,25 @@ private struct LiquidGlassSwiftUIView: View {
                     .fill(.ultraThinMaterial)
                     .modifier(GlassEffectModifier(borderRadius: borderRadius, interactive: interactive))
             )
-            .scaleEffect(isPressed ? 0.95 : 1.0)
+            .scaleEffect(isPressed ? pressScale : 1.0)
             .overlay(
                 ZStack {
                     // 液体波纹效果（参考示例）
                     Circle()
                         .fill(Color.white.opacity(0.3))
-                        .frame(width: isPressed ? 60 : 0)
-                        .scaleEffect(isPressed ? 1.5 : 0)
+                        .frame(width: isPressed ? rippleMaxDiameter : 0)
+                        .scaleEffect(isPressed ? 1.0 : 0)
                         .opacity(isPressed ? 1 : 0)
                         .animation(.easeOut(duration: 0.4), value: isPressed)
                 }
             )
             .onChange(of: tapModel.tapCounter) { _ in
                 // 原生手势触发：使用弹簧动画带来液体般的反馈
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                withAnimation(.spring(response: springResponse, dampingFraction: springDampingFraction)) {
                     isPressed = true
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    withAnimation(.spring(response: springResponse, dampingFraction: springDampingFraction)) {
                         isPressed = false
                     }
                 }
@@ -114,7 +119,11 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
 
         var borderRadius: CGFloat = 20
         var interactive: Bool = true
-        var outerMargin: CGFloat = 12 // 透明外边距，避免动画被裁剪
+        // 动效参数（默认值应与 Flutter 端保持一致）
+        var pressScale: CGFloat = 0.95
+        var rippleMaxDiameter: CGFloat = 60
+        var springResponse: Double = 0.3
+        var springDampingFraction: Double = 0.6
 
         if let dict = args as? [String: Any] {
             if let br = dict["borderRadius"] as? NSNumber {
@@ -125,22 +134,40 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
             if let inter = dict["interactive"] as? Bool {
                 interactive = inter
             }
-            if let m = dict["outerMargin"] as? NSNumber {
-                outerMargin = max(0, CGFloat(truncating: m))
-            } else if let md = dict["outerMargin"] as? Double {
-                outerMargin = max(0, CGFloat(md))
-            }
+            if let ps = dict["pressScale"] as? Double { pressScale = CGFloat(ps) }
+            if let rd = dict["rippleMaxDiameter"] as? Double { rippleMaxDiameter = CGFloat(rd) }
+            if let sr = dict["springResponse"] as? Double { springResponse = sr }
+            if let sdf = dict["springDampingFraction"] as? Double { springDampingFraction = sdf }
         }
 
-        // 通过 layoutMargins 在容器内部留出透明外边距
-        containerView.layoutMargins = UIEdgeInsets(top: outerMargin, left: outerMargin, bottom: outerMargin, right: outerMargin)
+        // 根据动效参数动态计算所需外边距：
+        // - 波纹最大半径会向外扩展 rippleMaxDiameter/2
+        // - 阴影也会带来额外扩展（使用当前 shadowRadius）
+        // - 额外 2pt 缓冲保障抗锯齿
+        let shadowR: CGFloat = 10
+        let rippleMargin: CGFloat = max(0, rippleMaxDiameter / 2)
+        let buffer: CGFloat = 2
+        let dynamicOuterMargin: CGFloat = interactive ? max(4, rippleMargin + shadowR + buffer) : 4
+
+        // 通过 layoutMargins 在容器内部留出透明外边距（尽量最小化浪费空间）
+        containerView.layoutMargins = UIEdgeInsets(top: dynamicOuterMargin, left: dynamicOuterMargin, bottom: dynamicOuterMargin, right: dynamicOuterMargin)
         containerView.preservesSuperviewLayoutMargins = false
 
         if #available(iOS 13.0, *) {
             if #available(iOS 26.0, *) {
                 let model = GlassTapModel()
                 self.tapModel = model
-                let hosting = UIHostingController(rootView: LiquidGlassSwiftUIView(borderRadius: borderRadius, interactive: interactive, tapModel: model))
+                let hosting = UIHostingController(
+                    rootView: LiquidGlassSwiftUIView(
+                        borderRadius: borderRadius,
+                        interactive: interactive,
+                        pressScale: pressScale,
+                        rippleMaxDiameter: rippleMaxDiameter,
+                        springResponse: springResponse,
+                        springDampingFraction: springDampingFraction,
+                        tapModel: model
+                    )
+                )
                 hosting.view.backgroundColor = .clear
                 hosting.view.clipsToBounds = false
                 hosting.view.translatesAutoresizingMaskIntoConstraints = false

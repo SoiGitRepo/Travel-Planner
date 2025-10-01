@@ -11,7 +11,11 @@ class _IOSLiquidGlassContainer extends StatefulWidget {
   final EdgeInsetsGeometry? margin;
   final EdgeInsetsGeometry? padding;
   final VoidCallback? onNativeTap;
-  final double outerMargin; // 传递给原生侧的透明外边距
+  // 动效参数：
+  final double pressScale; // 按压缩放（默认 0.95）
+  final double rippleMaxDiameter; // 波纹最大直径（默认 60）
+  final double springResponse; // 弹簧响应时间
+  final double springDampingFraction; // 弹簧阻尼
 
   const _IOSLiquidGlassContainer({
     required this.child,
@@ -21,7 +25,10 @@ class _IOSLiquidGlassContainer extends StatefulWidget {
     this.margin,
     this.padding,
     this.onNativeTap,
-    this.outerMargin = 12,
+    this.pressScale = 0.95,
+    this.rippleMaxDiameter = 60,
+    this.springResponse = 0.3,
+    this.springDampingFraction = 0.6,
   });
 
   @override
@@ -48,7 +55,10 @@ class _IOSLiquidGlassContainerState extends State<_IOSLiquidGlassContainer> {
             creationParams: {
               'borderRadius': widget.borderRadius,
               'interactive': widget.interactive,
-              'outerMargin': widget.outerMargin,
+              'pressScale': widget.pressScale,
+              'rippleMaxDiameter': widget.rippleMaxDiameter,
+              'springResponse': widget.springResponse,
+              'springDampingFraction': widget.springDampingFraction,
             },
             creationParamsCodec: const StandardMessageCodec(),
           ),
@@ -72,7 +82,10 @@ extension IOSLiquidGlassX on Widget {
     EdgeInsetsGeometry? margin,
     EdgeInsetsGeometry? padding,
     VoidCallback? onNativeTap,
-    double outerMargin = 12,
+    double pressScale = 0.95,
+    double rippleMaxDiameter = 60,
+    double springResponse = 0.3,
+    double springDampingFraction = 0.6,
   }) {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       return _IOSLiquidGlassContainer(
@@ -82,7 +95,10 @@ extension IOSLiquidGlassX on Widget {
         margin: margin,
         padding: padding,
         onNativeTap: onNativeTap,
-        outerMargin: outerMargin,
+        pressScale: pressScale,
+        rippleMaxDiameter: rippleMaxDiameter,
+        springResponse: springResponse,
+        springDampingFraction: springDampingFraction,
         child: this,
       );
     }
