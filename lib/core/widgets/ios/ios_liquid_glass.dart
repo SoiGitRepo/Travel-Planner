@@ -32,6 +32,10 @@ class _IOSLiquidGlassContainer extends StatefulWidget {
   final double shadowRadius;
   final double shadowOffsetX;
   final double shadowOffsetY;
+  // 是否允许底部出血（覆盖到屏幕底部安全区）
+  final bool bleedBottom;
+  // 是否仅圆角顶部（适用于底部面板）
+  final bool roundTopOnly;
 
   const _IOSLiquidGlassContainer({
     required this.child,
@@ -52,6 +56,8 @@ class _IOSLiquidGlassContainer extends StatefulWidget {
     this.shadowRadius = 10,
     this.shadowOffsetX = 0,
     this.shadowOffsetY = 4,
+    this.bleedBottom = false,
+    this.roundTopOnly = false,
   });
 
   @override
@@ -74,6 +80,8 @@ extension _IOSLiquidGlassContainerParams on _IOSLiquidGlassContainer {
       'shadowRadius': shadowRadius,
       'shadowOffsetX': shadowOffsetX,
       'shadowOffsetY': shadowOffsetY,
+      'bleedBottom': bleedBottom,
+      'roundTopOnly': roundTopOnly,
     };
     if (bgColor != null) map['bgColor'] = _toArgbInt(bgColor!);
     if (shadowColor != null) map['shadowColor'] = _toArgbInt(shadowColor!);
@@ -94,21 +102,36 @@ class _IOSLiquidGlassContainerState extends State<_IOSLiquidGlassContainer> {
       alignment: widget.alignment,
       clipBehavior: Clip.none,
       children: [
-        Positioned.fill(
-          child: UiKitView(
-            viewType: 'GlassContainer',
-            creationParams: widget._buildCreationParams(),
-            creationParamsCodec: const StandardMessageCodec(),
-          ),
-        ),
+        Builder(builder: (context) {
+          final bottomSafe = MediaQuery.of(context).padding.bottom;
+          return Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: widget.bleedBottom ? -bottomSafe : 0,
+            child: UiKitView(
+              viewType: 'GlassContainer',
+              creationParams: widget._buildCreationParams(),
+              creationParamsCodec: const StandardMessageCodec(),
+            ),
+          );
+        }),
         // 前景内容保持自身交互，不与原生互相传播
         content,
       ],
     );
 
-    return widget.margin != null
-        ? Container(margin: widget.margin, child: stack)
+    final scoped = widget.bleedBottom
+        ? MediaQuery.removePadding(
+            context: context,
+            removeBottom: true,
+            child: stack,
+          )
         : stack;
+
+    return widget.margin != null
+        ? Container(margin: widget.margin, child: scoped)
+        : scoped;
   }
 }
 
@@ -131,6 +154,8 @@ extension IOSLiquidGlassX on Widget {
     double shadowRadius = 10,
     double shadowOffsetX = 0,
     double shadowOffsetY = 4,
+    bool bleedBottom = false,
+    bool roundTopOnly = false,
   }) {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       return _IOSLiquidGlassContainer(
@@ -151,6 +176,8 @@ extension IOSLiquidGlassX on Widget {
         shadowRadius: shadowRadius,
         shadowOffsetX: shadowOffsetX,
         shadowOffsetY: shadowOffsetY,
+        bleedBottom: bleedBottom,
+        roundTopOnly: roundTopOnly,
         child: this,
       );
     }

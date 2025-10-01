@@ -5,6 +5,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_api_availability/google_api_availability.dart';
+// import 'package:travel_planner/core/widgets/glassy/glassy.dart';
 import 'package:travel_planner/core/widgets/ios/ios_liquid_glass.dart';
 // import 'package:go_router/go_router.dart';
 
@@ -333,7 +334,7 @@ class MapPage extends HookConsumerWidget {
             buildingsEnabled: true,
             indoorViewEnabled: true,
             initialCameraPosition: initialPosition,
-            myLocationButtonEnabled: true,
+            myLocationButtonEnabled: false,
             myLocationEnabled: false,
             zoomControlsEnabled: false,
             style: mapStyleDefault,
@@ -393,15 +394,6 @@ class MapPage extends HookConsumerWidget {
               label: const Text('适配视野'),
             ).iosLiquidGlass(
               borderRadius: 12,
-              padding: const EdgeInsets.all(10),
-            ),
-          ),
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 12,
-            right: 12,
-            child: const Text('适配视野').iosLiquidGlass(
-              borderRadius: 12,
-              padding: const EdgeInsets.all(20),
             ),
           ),
           TimelinePanel(controller: sheetController),
