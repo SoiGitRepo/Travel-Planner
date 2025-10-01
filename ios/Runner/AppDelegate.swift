@@ -3,6 +3,20 @@ import UIKit
 import GoogleMaps
 import SwiftUI
 
+@available(iOS 13.0, *)
+private struct TopRoundedRectangle: Shape {
+    let radius: CGFloat
+    func path(in rect: CGRect) -> Path {
+        let corners: UIRectCorner = [.topLeft, .topRight]
+        let bezier = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(bezier.cgPath)
+    }
+}
+
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   override func application(
@@ -48,14 +62,14 @@ private struct LiquidGlassSwiftUIView: View {
     var body: some View {
         ZStack { Color.clear }
             .background(
-                // 由 GlassEffectModifier 统一决定：iOS26 用 glassEffect；低版本用 .ultraThinMaterial 回退
-                RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                // 仅圆顶部两个角，底部保持直角以贴边覆盖
+                TopRoundedRectangle(radius: borderRadius)
                     .modifier(GlassEffectModifier(borderRadius: borderRadius, interactive: interactive))
             )
             .overlay(
                 Group {
                     if let tint = bgUIColor, bgOpacity > 0 {
-                        RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                        TopRoundedRectangle(radius: borderRadius)
                             .fill(Color(uiColor: tint).opacity(bgOpacity))
                     }
                 }
@@ -98,16 +112,16 @@ private struct GlassEffectModifier: ViewModifier {
             return AnyView(
                 content.glassEffect(
                     interactive ? .regular.interactive() : .regular,
-                    in: RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                    in: TopRoundedRectangle(radius: borderRadius)
                 )
             )
         } else {
             return AnyView(
                 content.background(
-                    RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                    TopRoundedRectangle(radius: borderRadius)
                         .fill(.ultraThinMaterial)
                         .overlay(
-                            RoundedRectangle(cornerRadius: borderRadius, style: .continuous)
+                            TopRoundedRectangle(radius: borderRadius)
                                 .stroke(Color.primary.opacity(0.2), lineWidth: 0.7)
                         )
                 )
@@ -182,8 +196,8 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
         // - 阴影也会带来额外扩展（使用当前 shadowRadius）
         // - 额外 2pt 缓冲保障抗锯齿
         let dynamicOuterMargin = Self.computeDynamicOuterMargin(frame: frame, rippleMaxDiameter: rippleMaxDiameter, shadowRadius: shadowRadius, interactive: interactive)
-        // 在容器内部留出透明外边距（尽量最小化浪费空间），并忽略 Safe Area 以允许覆盖到底部安全区
-        containerView.layoutMargins = UIEdgeInsets(top: dynamicOuterMargin, left: dynamicOuterMargin, bottom: dynamicOuterMargin, right: dynamicOuterMargin)
+        // 仅保留上/左/右外边距，底部为 0 以贴边覆盖安全区
+        containerView.layoutMargins = UIEdgeInsets(top: dynamicOuterMargin, left: dynamicOuterMargin, bottom: 0, right: dynamicOuterMargin)
         containerView.preservesSuperviewLayoutMargins = false
         if #available(iOS 11.0, *) { containerView.insetsLayoutMarginsFromSafeArea = false }
 
@@ -212,7 +226,7 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
                 hosting.view.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: dynamicOuterMargin),
                 hosting.view.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -dynamicOuterMargin),
                 hosting.view.topAnchor.constraint(equalTo: containerView.topAnchor, constant: dynamicOuterMargin),
-                hosting.view.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -dynamicOuterMargin)
+                hosting.view.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
             ])
         } else {
             let blur = UIVisualEffectView(effect: UIBlurEffect(style: .light))
@@ -224,7 +238,7 @@ class GlassContainerPlatformView: NSObject, FlutterPlatformView {
                 blur.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: dynamicOuterMargin),
                 blur.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -dynamicOuterMargin),
                 blur.topAnchor.constraint(equalTo: containerView.topAnchor, constant: dynamicOuterMargin),
-                blur.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -dynamicOuterMargin)
+                blur.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
             ])
         }
 
